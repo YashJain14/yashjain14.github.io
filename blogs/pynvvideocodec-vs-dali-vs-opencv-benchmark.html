@@ -381,7 +381,7 @@
     </style>
     <!-- Open Graph (LinkedIn, Facebook, WhatsApp, Slack) -->
 <meta property="og:title" content="Benchmarking Modern GPU Video Inference Pipelines" />
-<meta property="og:description" content="Comparing OpenCV, DALI, PyNvVideoCodec 2.1 and CV-CUDA end-to-end on an NVIDIA A100. PyNvVideoCodec hits 431 FPS — 3.1× faster than CPU baseline." />
+<meta property="og:description" content="Comparing OpenCV, DALI, PyNvVideoCodec 2.1 and CV-CUDA end-to-end on an NVIDIA A100. CV-CUDA hits 451 FPS — 3.2× faster than CPU baseline." />
 <meta property="og:image" content="https://yashjain14.github.io/blogs/vid-inference.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
@@ -391,7 +391,7 @@
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Benchmarking Modern GPU Video Inference Pipelines" />
-<meta name="twitter:description" content="Comparing OpenCV, DALI, PyNvVideoCodec 2.1 and CV-CUDA end-to-end on an NVIDIA A100. PyNvVideoCodec hits 431 FPS — 3.1× faster than CPU baseline." />
+<meta name="twitter:description" content="Comparing OpenCV, DALI, PyNvVideoCodec 2.1 and CV-CUDA end-to-end on an NVIDIA A100. CV-CUDA hits 451 FPS — 3.2× faster than CPU baseline." />
 <meta name="twitter:image" content="https://yashjain14.github.io/blogs/vid-inference.png" />
   </head>
   <body>
@@ -445,7 +445,7 @@
     <div class="callout">
       <span class="callout-label">The question</span>
       <p>
-        Four libraries, one A100, one YOLO model, 512 frames. Which pipeline
+        Four libraries, one A100, one YOLO model, 1024 frames. Which pipeline
         finishes first — and why?
       </p>
     </div>
@@ -1199,7 +1199,7 @@
     </p>
 
     <ul style="margin: 16px 0 16px 24px; color: #374151; line-height: 2">
-      <li>Every pipeline processes the exact same 512 frames</li>
+      <li>Every pipeline processes the exact same 1024 frames</li>
       <li>File I/O overhead doesn't contaminate the benchmark runs</li>
       <li>Decode time is still captured honestly — once per pipeline</li>
       <li>The loop timing reflects steady-state throughput</li>
@@ -1209,9 +1209,11 @@
       <span class="callout-label">Methodology note</span>
       <p>
         All pipelines used the same YOLOv8n model, same 640×640 input
-        resolution, FP16 inference, batch size 16, on an NVIDIA A100-SXM4-40GB
-        with PyTorch 2.6 + CUDA 12.4. Each pipeline ran 3 warmup iterations
-        before 10 timed benchmark runs.
+        resolution, FP16 inference, on an NVIDIA A100-SXM4-40GB with PyTorch
+        2.6 + CUDA 12.4. Each pipeline ran 3 warmup iterations before 10 timed
+        benchmark runs, processing 1024 frames per run. The full sweep covers
+        batch sizes 16, 32, 64, and 128. CV-CUDA fails at batch 128 with a
+        tensor size limit and is excluded from that column.
       </p>
     </div>
 
@@ -1224,147 +1226,160 @@
         <div class="stat-label">OpenCV FPS</div>
       </div>
       <div class="stat blue">
-        <div class="stat-val">379</div>
+        <div class="stat-val">383</div>
         <div class="stat-label">DALI FPS</div>
       </div>
       <div class="stat green">
-        <div class="stat-val">431</div>
+        <div class="stat-val">405</div>
         <div class="stat-label">PyNvVC FPS</div>
       </div>
       <div class="stat amber">
-        <div class="stat-val">414</div>
+        <div class="stat-val">451</div>
         <div class="stat-label">CV-CUDA FPS</div>
       </div>
     </div>
 
-    <!-- Chart 1: FPS comparison -->
+    <p style="font-size:13px; color:var(--muted); margin-top:-8px;">All figures at batch size 16, 1024 frames, A100-SXM4-40GB.</p>
+
+    <!-- Chart 1: FPS comparison at batch 16 -->
     <div class="chart-wrap">
-      <div class="chart-title">
-        Fig 1 — End-to-end throughput (FPS) · higher is better
-      </div>
+      <div class="chart-title">Fig 1 — End-to-end throughput at batch 16 (FPS) · higher is better</div>
       <canvas id="chart-fps"></canvas>
     </div>
 
     <p>
-      The headline number:
-      <strong
-        >PyNvVideoCodec 2.1 at 431 FPS is 3.1× faster than OpenCV CPU</strong
-      >
-      end-to-end. DALI comes in at 379 FPS (2.7×), and CV-CUDA at 414 FPS
-      (2.9×). All three GPU pipelines are firmly in the same ballpark, which
-      tells an interesting story — the bottleneck has shifted from
-      decode/preprocess to inference itself.
+      At batch 16, <strong>CV-CUDA leads at 451 FPS</strong>, followed by
+      PyNvVideoCodec at 405 FPS, DALI at 383 FPS, and OpenCV at 140 FPS.
+      But the more interesting story is how these numbers shift as batch size grows —
+      which we'll get to after the stage breakdown.
     </p>
 
     <!-- Chart 2: Stage breakdown -->
     <div class="chart-wrap">
-      <div class="chart-title">
-        Fig 2 — Per-stage latency breakdown (avg over 10 runs)
-      </div>
+      <div class="chart-title">Fig 2 — Per-stage latency breakdown at batch 16 (avg over 10 runs)</div>
       <canvas id="chart-stages"></canvas>
     </div>
 
     <p>
-      This chart is where the real story lives. Look at how radically the time
-      distribution changes across pipelines:
+      This is the most important chart. <strong>OpenCV CPU spends 2.47s on
+      preprocess</strong> — resizing and colour-converting 1024 frames on CPU. Every GPU
+      pipeline collapses that to around 0.086–0.107s. That single change — moving
+      preprocess off the CPU — is where essentially all of the 3× speedup comes from.
+      Decode times are within ~0.3s of each other. Inference across the three GPU
+      pipelines is nearly identical (0.73–0.91s) once the GPU isn't being starved —
+      OpenCV's 3.07s inference is inflated because the CPU bottleneck forces many
+      small, inefficient kernel launches.
     </p>
 
     <p>
-      <strong>OpenCV CPU</strong> spends 1.27s on preprocess — that's 35% of
-      total time just doing <code>cv2.resize</code> and
-      <code>cv2.cvtColor</code> on CPU. Inference on the GPU takes 1.47s on top
-      of that. The GPU is starved waiting for the CPU to finish prepping each
-      batch.
-    </p>
-
-    <p>
-      <strong>DALI and PyNvVideoCodec</strong> collapse preprocess time from
-      ~1.27s to ~0.054s — a 23× reduction. That single change accounts for most
-      of the 3× speedup. Inference time is nearly identical across all GPU
-      pipelines (~0.38–0.40s), which tells us that inference itself is not the
-      bottleneck once you stop starving the GPU.
-    </p>
-
-    <p>
-      <strong>CV-CUDA</strong> shaves preprocess down further to 0.043s, and
-      inference to 0.366s — the slightly faster inference likely reflects better
-      cache locality when the preprocessed tensors come from CV-CUDA's zero-copy
-      output rather than <code>torch.interpolate</code>.
+      CV-CUDA's 0.086s preprocess vs DALI/PyNvVC's 0.107s looks small in absolute terms,
+      but it compounds: CV-CUDA also gets faster inference (0.728s vs 0.910s), likely
+      because its zero-copy tensor output lands in a more cache-friendly layout for the
+      model input.
     </p>
 
     <!-- Chart 3: Speedup waterfall -->
     <div class="chart-wrap">
-      <div class="chart-title">Fig 3 — Speedup vs OpenCV CPU baseline</div>
+      <div class="chart-title">Fig 3 — Speedup vs OpenCV CPU baseline (batch 16)</div>
       <canvas id="chart-speedup"></canvas>
     </div>
 
-    <!-- Chart 4: Decode comparison -->
+    <!-- Chart 4: Full batch sweep -->
     <div class="chart-wrap">
-      <div class="chart-title">Fig 4 — Decode time (seconds, 512 frames)</div>
-      <canvas id="chart-decode"></canvas>
+      <div class="chart-title">Fig 4 — FPS across all batch sizes · all 4 pipelines</div>
+      <canvas id="chart-batch"></canvas>
     </div>
 
     <p>
-      Decode times are interestingly close:
-      <strong
-        >0.74s for PyNvVideoCodec, 0.82s for CV-CUDA, 0.90s for DALI and
-        OpenCV</strong
-      >. The OpenCV result might surprise you — it's decoding 512 frames from a
-      960×540 MP4 file in 0.9s using CPU-only H.264 decoding, which is honestly
-      respectable. PyNvVideoCodec's 0.74s reflects the NVDEC hardware decoder
-      operating without the DALI pipeline overhead.
+      The batch sweep tells the complete story. A few things stand out:
+    </p>
+    <p>
+      <strong>CV-CUDA wins at every batch size it supports</strong>, and the gap widens at
+      batch 64 — 459 FPS vs PyNvVideoCodec's 427 FPS, a 7.5% advantage. At batch 128
+      CV-CUDA throws <code>NVCV_ERROR_INVALID_ARGUMENT: Input or output tensors are too
+      large</code> and fails entirely, making PyNvVideoCodec the only option at that scale.
+    </p>
+    <p>
+      <strong>OpenCV actually improves slightly at larger batch sizes</strong> (140 → 149 FPS
+      from batch 16 to 128). This is because larger batches amortise the per-batch inference
+      overhead, and the GPU utilisation improves. The CPU preprocess bottleneck stays roughly
+      constant, but inference becomes slightly more efficient.
+    </p>
+    <p>
+      <strong>DALI is consistently third</strong>, sitting between OpenCV and
+      PyNvVideoCodec across all batch sizes. Its preprocess and inference times are
+      actually identical to PyNvVideoCodec's — the gap comes entirely from slower
+      decode (1.64s vs 1.50s at batch 16), likely due to DALI's internal pipeline
+      orchestration overhead around the NVDEC path.
+    </p>
+    <p>
+      <strong>PyNvVideoCodec peaks at batch 64</strong> (427 FPS) and actually
+      dips slightly to 420 FPS at batch 128 — the only GPU pipeline to regress at
+      larger batch sizes. This may be a memory pressure effect at batch 128 that
+      doesn't affect DALI's simpler memory management.
     </p>
 
-    <!-- Detailed results table -->
+    <!-- Full results table -->
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Pipeline</th>
-            <th>Avg FPS</th>
-            <th>Total (s)</th>
-            <th>Decode (s)</th>
-            <th>Preprocess (s)</th>
-            <th>Inference (s)</th>
-            <th>Speedup</th>
+            <th>B16 FPS</th>
+            <th>B32 FPS</th>
+            <th>B64 FPS</th>
+            <th>B128 FPS</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><span class="badge red">OpenCV CPU</span></td>
-            <td>140.1</td>
-            <td>3.655</td>
-            <td>0.905</td>
-            <td>1.268</td>
-            <td>1.472</td>
-            <td>1.0×</td>
+            <td>140.2</td><td>141.9</td><td>144.4</td><td>148.8</td>
           </tr>
           <tr>
             <td><span class="badge blue">FFmpeg + DALI</span></td>
-            <td>379.2</td>
-            <td>1.350</td>
-            <td>0.903</td>
-            <td>0.054</td>
-            <td>0.386</td>
-            <td><strong>2.7×</strong></td>
+            <td>382.8</td><td>387.7</td><td>391.3</td><td>396.7</td>
           </tr>
           <tr>
             <td><span class="badge green">PyNvVideoCodec 2.1</span></td>
-            <td>431.3</td>
-            <td>1.187</td>
-            <td>0.737</td>
-            <td>0.054</td>
-            <td>0.390</td>
-            <td><strong>3.1×</strong></td>
+            <td>405.0</td><td>414.0</td><td>427.3</td><td>420.4</td>
           </tr>
           <tr>
             <td><span class="badge amber">PyNvVC + CV-CUDA</span></td>
-            <td>414.7</td>
-            <td>1.238</td>
-            <td>0.820</td>
-            <td>0.043</td>
-            <td>0.367</td>
-            <td><strong>2.9×</strong></td>
+            <td>451.1</td><td>455.0</td><td>459.3</td><td>❌ crash</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Decode times table -->
+    <div class="table-wrap" style="margin-top:8px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Pipeline</th>
+            <th>Decode (s)</th>
+            <th>Preprocess (s)</th>
+            <th>Inference (s)</th>
+            <th>Total B16 (s)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge red">OpenCV CPU</span></td>
+            <td>1.752</td><td>2.471</td><td>3.065</td><td>7.303</td>
+          </tr>
+          <tr>
+            <td><span class="badge blue">FFmpeg + DALI</span></td>
+            <td>1.644</td><td>0.107</td><td>0.910</td><td>2.675</td>
+          </tr>
+          <tr>
+            <td><span class="badge green">PyNvVideoCodec 2.1</span></td>
+            <td>1.497</td><td>0.107</td><td>0.910</td><td>2.528</td>
+          </tr>
+          <tr>
+            <td><span class="badge amber">PyNvVC + CV-CUDA</span></td>
+            <td>1.444</td><td>0.086</td><td>0.728</td><td>2.270</td>
           </tr>
         </tbody>
       </table>
@@ -1376,21 +1391,41 @@
     <h3>Preprocess is the real CPU bottleneck — not inference</h3>
     <p>
       Before running this benchmark, I assumed inference would dominate. It
-      doesn't. <code>cv2.resize</code> + <code>cv2.cvtColor</code> for 512
-      frames takes 1.27 seconds on CPU. The same operation on GPU takes 54
-      milliseconds. That 23× difference in preprocess is where most of the 3×
-      end-to-end gain comes from — not from faster decoding.
+      doesn't. <code>cv2.resize</code> + <code>cv2.cvtColor</code> for 1024
+      frames takes 2.47 seconds on CPU. The same operation on GPU takes around
+      86–107 milliseconds depending on the pipeline — a 23–29× reduction.
+      That single change accounts for essentially all of the end-to-end speedup.
+      Decode times are within ~0.3s of each other across all pipelines. Inference
+      across the three GPU pipelines is nearly identical (0.73–0.91s) once the GPU
+      stops being starved — OpenCV's 3.07s inference is inflated because per-frame
+      CPU handoff forces many small, inefficient GPU kernel launches.
     </p>
 
-    <h3>PyNvVideoCodec 2.1 is the right default for new projects</h3>
+    <h3>CV-CUDA is the fastest — if your batch size is under 128</h3>
+    <p>
+      CV-CUDA wins at every batch size it supports: 451 FPS at batch 16, 455 at
+      batch 32, 459 at batch 64. The gap over plain PyNvVideoCodec widens as
+      batch size grows — 7.5% faster at batch 64 (459 vs 427 FPS). The advantage
+      comes from CV-CUDA's fused resize + normalize kernel, which avoids multiple
+      CUDA kernel launches and produces a zero-copy tensor that feeds directly
+      into the model with better cache locality.
+    </p>
+    <p>
+      At batch 128, CV-CUDA throws
+      <code>NVCV_ERROR_INVALID_ARGUMENT: Input or output tensors are too large</code>
+      and fails entirely. If your production workload runs at batch 128 or above,
+      PyNvVideoCodec with <code>torch.nn.functional.interpolate</code> is your only
+      option.
+    </p>
+
+    <h3>PyNvVideoCodec 2.1 is the safest default for new projects</h3>
     <p>
       DALI is powerful but has a steep learning curve — its pipeline DSL is
       non-trivial, it's sensitive to video container formats (MOV files caused
       180-second decode times in my testing due to seeking behavior), and it's
       overkill for single-video inference. PyNvVideoCodec 2.1 gives you direct
-      NVDEC access via a <code>pip install</code>, a simple Python API, and
-      performance that beats DALI in this benchmark. It's the better starting
-      point.
+      NVDEC access via a <code>pip install</code>, a simple Python API, works
+      at all batch sizes, and beats DALI at every batch size in this benchmark.
     </p>
 
     <div class="callout blue">
@@ -1404,41 +1439,25 @@
       </p>
     </div>
 
-    <h3>CV-CUDA wins — but batch size matters a lot</h3>
-    <p>
-      The batch 16 results made CV-CUDA look like a marginal improvement (414 vs
-      431 FPS). Running a sweep across batch sizes 16, 32, 64, and 128 told a
-      different story. CV-CUDA outperforms plain PyNvVideoCodec at every batch
-      size it supports, and the gap widens significantly at batch 64:
-    </p>
-
-    <!-- Chart 5: Batch sweep -->
-    <div class="chart-wrap">
-      <div class="chart-title">Fig 5 — CV-CUDA vs PyNvVideoCodec across batch sizes</div>
-      <canvas id="chart-batch"></canvas>
-    </div>
-
-    <p>
-      At batch 64, CV-CUDA hits <strong>453 FPS vs PyNvVideoCodec's 355 FPS</strong> — a 28%
-      advantage. The reason: CV-CUDA's <code>resize</code> + <code>convertto</code> fuse into
-      fewer kernel launches as batch size grows, while <code>torch.nn.functional.interpolate</code>
-      pays a fixed per-call overhead regardless. At batch 128, CV-CUDA hits a hard tensor
-      size limit (<code>NVCV_ERROR_INVALID_ARGUMENT</code>), so PyNvVideoCodec is the only
-      option at that scale.
-    </p>
-    <p>
-      The practical takeaway: if your production batch size is 32 or above, CV-CUDA is the
-      clear choice. At batch 16, the difference is small enough that either works fine.
-    </p>
-
     <h3>Inference is the new bottleneck</h3>
     <p>
-      Once you move decode and preprocess to the GPU, inference itself becomes
-      the dominant cost (~0.37–0.40s for 32 batches of 16 frames). The next
-      logical optimization step is TensorRT — converting YOLOv8n to a TensorRT
-      FP16 engine typically halves inference time on A100, which would push
-      these pipelines toward 600-800 FPS.
+      Once decode and preprocess move to GPU, inference dominates at
+      0.73–0.91s per 1024 frames across all GPU pipelines. The next logical
+      optimisation is TensorRT — exporting YOLOv8n to a TensorRT FP16 engine
+      typically halves inference time on A100, which would push these pipelines
+      toward 600–800 FPS. That's the remaining 2× sitting on the table.
     </p>
+
+    <div class="callout">
+      <span class="callout-label">What's next</span>
+      <p>
+        One thing not tested here: pinning decode and preprocessing to the same
+        explicit CUDA stream. In the current setup there's implicit
+        synchronisation between NVDEC output and CV-CUDA ops, which likely
+        costs a few milliseconds per batch. Explicit stream management is on
+        the list for a follow-up, along with TensorRT inference timing.
+      </p>
+    </div>
 
     <!-- ════════════════════════════════════════ CODE -->
     <h2>The key code pattern</h2>
@@ -1453,11 +1472,11 @@
 
 dec = ThreadedDecoder(
     video_path,
-    512 * 2,          <span class="cm"># buffer_size — required positional arg</span>
+    1024 * 2,         <span class="cm"># buffer_size — required positional arg</span>
     gpu_id=0,
     output_color_type=OutputColorType.RGB,  <span class="cm"># interleaved HWC</span>
 )
-all_frames = dec.get_batch_frames(512)
+all_frames = dec.get_batch_frames(1024)
 dec.end()
 
 <span class="cm"># Benchmark loop: preprocess → infer → postprocess</span>
@@ -1473,7 +1492,7 @@ dec.end()
 
     <pre><code><span class="kw">import</span> cvcuda
 
-nhwc     = batch_hwc.float().div(255.0).contiguous()
+nhwc     = batch_hwc.contiguous()
 ct       = cvcuda.as_tensor(nhwc, <span class="str">"NHWC"</span>)           <span class="cm"># zero-copy</span>
 resized  = cvcuda.resize(ct, (N, 640, 640, 3), cvcuda.Interp.LINEAR)
 normed   = cvcuda.convertto(resized, cvcuda.Type.F32, scale=1.0/255.0)
@@ -1488,9 +1507,9 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
         Moving preprocess from CPU to GPU gives you the bulk of the speedup (23×
         on preprocess alone). PyNvVideoCodec 2.1 is the most practical choice
         for 2025/2026 — simpler API than DALI, faster decode, pip-installable.
-        CV-CUDA is the better preprocessor at batch ≥ 32, with a 28% edge at batch 64.
+        CV-CUDA is the faster preprocessor, with a 7.5% edge over PyNvVideoCodec at batch 64.
         At batch 128 CV-CUDA hits a tensor size limit, so PyNvVideoCodec is the
-        only option at that scale. All GPU pipelines are 2.7–3.1× faster than
+        only option at that scale. All GPU pipelines are 2.7–3.2× faster than
         OpenCV CPU end-to-end on A100.
       </p>
     </div>
@@ -1520,11 +1539,11 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
         >Yash Jain · Benchmarked on NSCC Singapore · A100-SXM4-40GB · April
         2026</span
       >
-      <span>PyTorch 2.6 · CUDA 12.4 · YOLOv8n · 512 frames</span>
+      <span>PyTorch 2.6 · CUDA 12.4 · YOLOv8n · 1024 frames</span>
     </footer> -->
 
     <script>
-      // ── Data ──────────────────────────────────────────────────────────────────
+      // ── Data (full sweep, 1024 frames, batch 16) ─────────────────────────────
       const pipelines = [
         "OpenCV CPU",
         "FFmpeg + DALI",
@@ -1532,20 +1551,28 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
         "PyNvVC + CV-CUDA",
       ];
       const colors = {
-        red: { border: "#dc2626", bg: "rgba(220,38,38,0.12)" },
-        blue: { border: "#2563eb", bg: "rgba(37,99,235,0.12)" },
+        red:   { border: "#dc2626", bg: "rgba(220,38,38,0.12)" },
+        blue:  { border: "#2563eb", bg: "rgba(37,99,235,0.12)" },
         green: { border: "#059669", bg: "rgba(5,150,105,0.12)" },
         amber: { border: "#d97706", bg: "rgba(217,119,6,0.12)" },
       };
       const pipeColors = [colors.red, colors.blue, colors.green, colors.amber];
 
-      const avgFPS = [140.1, 379.2, 431.3, 414.7];
-      const totalS = [3.655, 1.35, 1.187, 1.238];
-      const decodeS = [0.905, 0.903, 0.737, 0.82];
-      const preprocessS = [1.268, 0.054, 0.054, 0.043];
-      const inferenceS = [1.472, 0.386, 0.39, 0.367];
-      const postS = [0.006, 0.006, 0.006, 0.005];
-      const speedup = [1.0, 2.7, 3.1, 2.9];
+      // Batch 16 numbers (1024 frames)
+      const avgFPS     = [140.2, 382.8, 405.0, 451.1];
+      const totalS     = [7.303, 2.675, 2.528, 2.270];
+      const decodeS    = [1.752, 1.644, 1.497, 1.444];
+      const preprocessS= [2.471, 0.107, 0.107, 0.086];
+      const inferenceS = [3.065, 0.910, 0.910, 0.728];
+      const postS      = [0.012, 0.011, 0.012, 0.010];
+      const speedup    = [1.0, 2.7, 2.9, 3.2];
+
+      // Full batch sweep data
+      const batchLabels = ["Batch 16", "Batch 32", "Batch 64", "Batch 128"];
+      const sweepOpenCV  = [140.2, 141.9, 144.4, 148.8];
+      const sweepDALI    = [382.8, 387.7, 391.3, 396.7];
+      const sweepPyNv    = [405.0, 414.0, 427.3, 420.4];
+      const sweepCVCuda  = [451.1, 455.0, 459.3, null];  // null = crash at B128
 
       // ── Chart defaults ────────────────────────────────────────────────────────
       Chart.defaults.color = "#6b7280";
@@ -1713,74 +1740,39 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
         },
       });
 
-      // ── Chart 4: Decode time ──────────────────────────────────────────────────
-      new Chart(document.getElementById("chart-decode"), {
+      // ── Chart 4: Full batch sweep — all 4 pipelines ─────────────────────────
+      new Chart(document.getElementById("chart-batch"), {
         type: "bar",
-        data: {
-          labels: pipelines,
-          datasets: [
-            {
-              data: decodeS,
-              backgroundColor: pipeColors.map((c) => c.bg),
-              borderColor: pipeColors.map((c) => c.border),
-              borderWidth: 2,
-              borderRadius: 6,
-              borderSkipped: false,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: pluginLegend,
-            tooltip: {
-              callbacks: {
-                label: (ctx) =>
-                  ` ${ctx.parsed.y.toFixed(3)}s to decode 512 frames`,
-              },
-            },
-          },
-          scales: {
-            x: { grid: { display: false } },
-            y: {
-              grid: gridOpts,
-              title: {
-                display: true,
-                text: "Decode time (s)",
-                color: "#4b5563",
-              },
-              beginAtZero: true,
-            },
-          },
-        },
-      });
-      // ── Chart 5: Batch sweep ──────────────────────────────────────────────────
-      const batchLabels = ['Batch 16', 'Batch 32', 'Batch 64', 'Batch 128'];
-      const batchPyNv   = [377.8, 380.2, 354.8, 404.1];
-      const batchCVCuda = [451.9, 419.1, 453.3, null];   // null = failed at 128
-
-      new Chart(document.getElementById('chart-batch'), {
-        type: 'bar',
         data: {
           labels: batchLabels,
           datasets: [
             {
-              label: 'PyNvVideoCodec 2.1',
-              data: batchPyNv,
-              backgroundColor: 'rgba(5,150,105,0.15)',
-              borderColor: '#059669',
-              borderWidth: 2,
-              borderRadius: 6,
-              borderSkipped: false,
+              label: "OpenCV CPU",
+              data: sweepOpenCV,
+              backgroundColor: "rgba(220,38,38,0.15)",
+              borderColor: "#dc2626",
+              borderWidth: 2, borderRadius: 5, borderSkipped: false,
             },
             {
-              label: 'PyNvVC + CV-CUDA',
-              data: batchCVCuda,
-              backgroundColor: 'rgba(217,119,6,0.15)',
-              borderColor: '#d97706',
-              borderWidth: 2,
-              borderRadius: 6,
-              borderSkipped: false,
+              label: "FFmpeg + DALI",
+              data: sweepDALI,
+              backgroundColor: "rgba(37,99,235,0.15)",
+              borderColor: "#2563eb",
+              borderWidth: 2, borderRadius: 5, borderSkipped: false,
+            },
+            {
+              label: "PyNvVideoCodec 2.1",
+              data: sweepPyNv,
+              backgroundColor: "rgba(5,150,105,0.15)",
+              borderColor: "#059669",
+              borderWidth: 2, borderRadius: 5, borderSkipped: false,
+            },
+            {
+              label: "PyNvVC + CV-CUDA",
+              data: sweepCVCuda,
+              backgroundColor: "rgba(217,119,6,0.15)",
+              borderColor: "#d97706",
+              borderWidth: 2, borderRadius: 5, borderSkipped: false,
             },
           ],
         },
@@ -1788,14 +1780,13 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
           responsive: true,
           plugins: {
             legend: {
-              display: true,
-              position: 'bottom',
-              labels: { usePointStyle: true, pointStyle: 'rect', padding: 20, color: '#6b7280' },
+              display: true, position: "bottom",
+              labels: { usePointStyle: true, pointStyle: "rect", padding: 20, color: "#6b7280" },
             },
             tooltip: {
               callbacks: {
                 label: (ctx) => ctx.parsed.y === null
-                  ? ` CV-CUDA failed (tensor too large)`
+                  ? ` ${ctx.dataset.label}: failed (tensor too large)`
                   : ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} FPS`,
               },
             },
@@ -1804,9 +1795,8 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
             x: { grid: { display: false } },
             y: {
               grid: gridOpts,
-              title: { display: true, text: 'Frames per second', color: '#4b5563' },
-              beginAtZero: false,
-              min: 300,
+              title: { display: true, text: "Frames per second", color: "#4b5563" },
+              beginAtZero: false, min: 100,
             },
           },
         },
