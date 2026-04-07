@@ -1404,15 +1404,31 @@
       </p>
     </div>
 
-    <h3>CV-CUDA's advantage shows at larger batch sizes</h3>
+    <h3>CV-CUDA wins — but batch size matters a lot</h3>
     <p>
-      At batch size 16, CV-CUDA's preprocessing is only marginally faster than
-      plain <code>torch.nn.functional.interpolate</code> (43ms vs 54ms).
-      CV-CUDA's fused kernel advantage is more pronounced at batch sizes of 64+
-      where the overhead of launching multiple separate CUDA kernels (for resize
-      and normalize separately) becomes significant. For production systems
-      processing high-throughput streams, CV-CUDA is worth profiling at your
-      actual batch size.
+      The batch 16 results made CV-CUDA look like a marginal improvement (414 vs
+      431 FPS). Running a sweep across batch sizes 16, 32, 64, and 128 told a
+      different story. CV-CUDA outperforms plain PyNvVideoCodec at every batch
+      size it supports, and the gap widens significantly at batch 64:
+    </p>
+
+    <!-- Chart 5: Batch sweep -->
+    <div class="chart-wrap">
+      <div class="chart-title">Fig 5 — CV-CUDA vs PyNvVideoCodec across batch sizes</div>
+      <canvas id="chart-batch"></canvas>
+    </div>
+
+    <p>
+      At batch 64, CV-CUDA hits <strong>453 FPS vs PyNvVideoCodec's 355 FPS</strong> — a 28%
+      advantage. The reason: CV-CUDA's <code>resize</code> + <code>convertto</code> fuse into
+      fewer kernel launches as batch size grows, while <code>torch.nn.functional.interpolate</code>
+      pays a fixed per-call overhead regardless. At batch 128, CV-CUDA hits a hard tensor
+      size limit (<code>NVCV_ERROR_INVALID_ARGUMENT</code>), so PyNvVideoCodec is the only
+      option at that scale.
+    </p>
+    <p>
+      The practical takeaway: if your production batch size is 32 or above, CV-CUDA is the
+      clear choice. At batch 16, the difference is small enough that either works fine.
     </p>
 
     <h3>Inference is the new bottleneck</h3>
@@ -1472,30 +1488,18 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
         Moving preprocess from CPU to GPU gives you the bulk of the speedup (23×
         on preprocess alone). PyNvVideoCodec 2.1 is the most practical choice
         for 2025/2026 — simpler API than DALI, faster decode, pip-installable.
-        CV-CUDA adds a small preprocess edge. All GPU pipelines are 2.7–3.1×
-        faster than OpenCV CPU end-to-end on A100.
+        CV-CUDA is the better preprocessor at batch ≥ 32, with a 28% edge at batch 64.
+        At batch 128 CV-CUDA hits a tensor size limit, so PyNvVideoCodec is the
+        only option at that scale. All GPU pipelines are 2.7–3.1× faster than
+        OpenCV CPU end-to-end on A100.
       </p>
     </div>
 
     <p>
-      The
-      <a
-        href="https://www.linkedin.com/pulse/understanding-video-inference-pipeline-dali-ffmpeg-opencv-chang-zen-v0qlc"
-        >article</a
-      >
-      that inspired this benchmark showed a 5.9× speedup for a specific TSMC
-      workload with DALI. My numbers are more modest (2.7–3.1×) — the difference
-      is that my benchmark includes a pre-decode step measured fairly, and uses
-      a relatively short video where file I/O is less dominant. For longer
-      videos and higher-resolution content, the GPU pipelines' advantages
-      compound further.
-    </p>
-
-    <p>
       If you're starting a video inference project today: skip OpenCV for
       anything performance-sensitive, use PyNvVideoCodec 2.1 as your decoder,
-      and profile CV-CUDA preprocessing at your target batch size. If you need
-      TensorRT inference, that's the remaining 2× sitting on the table.
+      and use CV-CUDA for preprocessing if your batch size is 32 or above.
+      If you need TensorRT inference, that's the remaining 2× sitting on the table.
     </p>
 
     <p>
@@ -1750,6 +1754,61 @@ final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></
           },
         },
       });
+      // ── Chart 5: Batch sweep ──────────────────────────────────────────────────
+      const batchLabels = ['Batch 16', 'Batch 32', 'Batch 64', 'Batch 128'];
+      const batchPyNv   = [377.8, 380.2, 354.8, 404.1];
+      const batchCVCuda = [451.9, 419.1, 453.3, null];   // null = failed at 128
+
+      new Chart(document.getElementById('chart-batch'), {
+        type: 'bar',
+        data: {
+          labels: batchLabels,
+          datasets: [
+            {
+              label: 'PyNvVideoCodec 2.1',
+              data: batchPyNv,
+              backgroundColor: 'rgba(5,150,105,0.15)',
+              borderColor: '#059669',
+              borderWidth: 2,
+              borderRadius: 6,
+              borderSkipped: false,
+            },
+            {
+              label: 'PyNvVC + CV-CUDA',
+              data: batchCVCuda,
+              backgroundColor: 'rgba(217,119,6,0.15)',
+              borderColor: '#d97706',
+              borderWidth: 2,
+              borderRadius: 6,
+              borderSkipped: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: { usePointStyle: true, pointStyle: 'rect', padding: 20, color: '#6b7280' },
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ctx.parsed.y === null
+                  ? ` CV-CUDA failed (tensor too large)`
+                  : ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} FPS`,
+              },
+            },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              grid: gridOpts,
+              title: { display: true, text: 'Frames per second', color: '#4b5563' },
+              beginAtZero: false,
+              min: 300,
+            },
+          },
+        },
+      });
     </script>
-  </body>
-</html>
