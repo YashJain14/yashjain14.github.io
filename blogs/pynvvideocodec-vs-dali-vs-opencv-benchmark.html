@@ -1,0 +1,1755 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Benchmarking Modern GPU Video Inference Pipelines on A100</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap"
+      rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --bg2: #f8f9fc;
+        --bg3: #f1f4f9;
+        --border: #e2e6f0;
+        --text: #111827;
+        --muted: #6b7280;
+        --accent: #0d7a63;
+        --accent2: #1d4ed8;
+        --accent3: #92400e;
+        --danger: #b91c1c;
+        --gpu-green: #0d7a63;
+        --cpu-red: #b91c1c;
+        --dali-blue: #1d4ed8;
+        --cvcuda-amber: #b45309;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "DM Sans", sans-serif;
+        font-size: 17px;
+        line-height: 1.8;
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0 24px 80px;
+      }
+
+      /* ── Header ── */
+      .site-header {
+        border-bottom: 1px solid var(--border);
+        padding: 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 60px;
+      }
+      .logo {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 700;
+        font-size: 15px;
+        color: #374151;
+        letter-spacing: -0.5px;
+      }
+      .logo span {
+        color: var(--muted);
+      }
+
+      /* ── Hero ── */
+      .hero {
+        margin-bottom: 56px;
+      }
+      .tag {
+        display: inline-block;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: #0d7a63;
+        background: rgba(13, 122, 99, 0.07);
+        border: 1px solid rgba(13, 122, 99, 0.2);
+        padding: 4px 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+      }
+      h1 {
+        font-family: "DM Serif Display", serif;
+        font-size: clamp(32px, 5vw, 52px);
+        font-weight: 400;
+        line-height: 1.15;
+        color: #111827;
+        margin-bottom: 20px;
+        letter-spacing: -0.5px;
+      }
+      h1 em {
+        color: var(--accent);
+        font-style: italic;
+      }
+      .hero-meta {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--muted);
+        font-family: "JetBrains Mono", monospace;
+        margin-bottom: 28px;
+      }
+      .hero-meta span::before {
+        content: "// ";
+        color: #d1d5db;
+      }
+      .hero-lead {
+        font-size: 19px;
+        line-height: 1.7;
+        color: #374151;
+        border-left: 3px solid var(--accent);
+        padding-left: 20px;
+        font-weight: 300;
+      }
+
+      /* ── Sections ── */
+      h2 {
+        font-family: "DM Serif Display", serif;
+        font-size: 28px;
+        font-weight: 400;
+        color: #111827;
+        margin: 56px 0 16px;
+        letter-spacing: -0.3px;
+      }
+      h3 {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin: 32px 0 12px;
+      }
+      p {
+        margin-bottom: 16px;
+        color: #374151;
+      }
+      strong {
+        color: #111827;
+        font-weight: 500;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+
+      /* ── Callout ── */
+      .callout {
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        padding: 20px 24px;
+        border-radius: 0 8px 8px 0;
+        margin: 28px 0;
+      }
+      .callout.amber {
+        border-left-color: var(--accent3);
+      }
+      .callout.blue {
+        border-left-color: var(--accent2);
+      }
+      .callout p {
+        margin: 0;
+        font-size: 15px;
+      }
+      .callout-label {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 6px;
+        display: block;
+      }
+      .callout.amber .callout-label {
+        color: var(--accent3);
+      }
+      .callout.blue .callout-label {
+        color: var(--accent2);
+      }
+
+      /* ── Stats row ── */
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 32px 0;
+      }
+      @media (max-width: 600px) {
+        .stats {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      .stat {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 20px 16px;
+        text-align: center;
+      }
+      .stat-val {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 6px;
+      }
+      .stat-label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .stat.green .stat-val {
+        color: #059669;
+      }
+      .stat.blue .stat-val {
+        color: #2563eb;
+      }
+      .stat.amber .stat-val {
+        color: #d97706;
+      }
+      .stat.red .stat-val {
+        color: #dc2626;
+      }
+
+      /* ── Chart containers ── */
+      .chart-wrap {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 28px 24px 20px;
+        margin: 32px 0;
+      }
+      .chart-title {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 12px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 20px;
+      }
+      .chart-wrap canvas {
+        max-height: 340px;
+      }
+
+      /* ── SVG diagram ── */
+      .diagram-wrap {
+        margin: 32px 0;
+        overflow-x: auto;
+      }
+
+      /* ── Code ── */
+      code {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 13px;
+        background: #f1f4f9;
+        border: 1px solid #e2e6f0;
+        padding: 2px 7px;
+        border-radius: 4px;
+        color: #0d7a63;
+      }
+      pre {
+        background: #1e2433;
+        border: 1px solid #2d3447;
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 20px 0;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 13px;
+        color: #cbd5e1;
+        line-height: 1.7;
+      }
+      .kw {
+        color: #7ec8e3;
+      }
+      .str {
+        color: #86efac;
+      }
+      .cm {
+        color: #475569;
+      }
+
+      /* ── Table ── */
+      .table-wrap {
+        overflow-x: auto;
+        margin: 28px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      thead th {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--muted);
+        text-align: left;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      tbody td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f1f4f9;
+        color: #374151;
+      }
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+      tbody tr:hover td {
+        background: #f8f9fc;
+      }
+      .badge {
+        display: inline-block;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 700;
+      }
+      .badge.green {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .badge.blue {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .badge.amber {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .badge.red {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      /* ── Pipeline diagram custom ── */
+      .pipe-stage {
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      /* ── Footer ── */
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 32px 0;
+        margin-top: 64px;
+        font-size: 13px;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      footer a {
+        color: var(--muted);
+      }
+      footer a:hover {
+        color: var(--accent);
+      }
+
+      /* ── Divider ── */
+      .divider {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 48px 0;
+      }
+    </style>
+    <!-- Open Graph (LinkedIn, Facebook, WhatsApp, Slack) -->
+<meta property="og:title" content="Benchmarking Modern GPU Video Inference Pipelines" />
+<meta property="og:description" content="Comparing OpenCV, DALI, PyNvVideoCodec 2.1 and CV-CUDA end-to-end on an NVIDIA A100. PyNvVideoCodec hits 431 FPS — 3.1× faster than CPU baseline." />
+<meta property="og:image" content="https://yashjain14.github.io/blogs/vid-inference.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://yashjain14.github.io/blogs/pynvvideocodec-vs-dali-vs-opencv-benchmark.html" />
+
+<!-- Twitter/X card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Benchmarking Modern GPU Video Inference Pipelines" />
+<meta name="twitter:description" content="Comparing OpenCV, DALI, PyNvVideoCodec 2.1 and CV-CUDA end-to-end on an NVIDIA A100. PyNvVideoCodec hits 431 FPS — 3.1× faster than CPU baseline." />
+<meta name="twitter:image" content="https://yashjain14.github.io/blogs/vid-inference.png" />
+  </head>
+  <body>
+    <!-- <header class="site-header">
+  <div class="logo">Video Inference Benchmark</div>
+</header> -->
+
+    <!-- ════════════════════════════════════════ HERO -->
+    <section class="hero">
+      <!-- <div class="tag">Benchmark · GPU · Video Inference</div> -->
+      <h1 style="padding-top: 5%">
+        Beyond DALI: Benchmarking <em>Modern</em> GPU Video Inference Pipelines
+      </h1>
+      <div class="hero-meta">
+        <span>Yash Jain</span>
+        <!-- <span>NVIDIA A100-SXM4-40GB</span> -->
+        <!-- <span>PyTorch 2.6 · CUDA 12.4 · YOLOv8n</span> -->
+        <span>April 2026</span>
+        <!-- <span><a href="https://github.com/YashJain14/video-inference-benchmark">GitHub</a></span> -->
+      </div>
+      <p class="hero-lead">
+        I ran the same YOLO inference workload through four completely different
+        video pipeline stacks — from plain OpenCV on CPU all the way to
+        PyNvVideoCodec 2.1 with CV-CUDA preprocessing — and measured every stage
+        independently. Here's what I found, and why it matters for anyone
+        building real-time video AI.
+      </p>
+    </section>
+
+    <!-- ════════════════════════════════════════ WHY -->
+    <h2>Why I built this benchmark</h2>
+
+    <p>
+      Video inference pipelines are everywhere — surveillance systems,
+      autonomous vehicles, content moderation, real-time analytics. But most
+      tutorials still show the naive approach: decode with OpenCV on CPU, resize
+      on CPU, then hand frames to a GPU model. I wanted to know how much
+      performance you're actually leaving on the table, and which modern
+      GPU-native libraries close that gap most effectively in 2025/2026.
+    </p>
+
+    <p>
+      The GPU-accelerated approach using NVDEC and dedicated preprocessing
+      libraries has been talked about for years.
+      <strong>A lot has changed recently.</strong> NVIDIA's own PyNvVideoCodec
+      2.0 dropped in mid-2025, and CV-CUDA (co-developed with ByteDance) has
+      been steadily maturing. I wanted to know: if you were building a video
+      inference pipeline from scratch today, what stack would actually win?
+    </p>
+
+    <div class="callout">
+      <span class="callout-label">The question</span>
+      <p>
+        Four libraries, one A100, one YOLO model, 512 frames. Which pipeline
+        finishes first — and why?
+      </p>
+    </div>
+
+    <p>
+      I wrote a benchmarking harness that times each stage independently —
+      decode, preprocess, inference, and postprocess — so you can see exactly
+      where the time goes, not just a single wall-clock number.
+    </p>
+
+    <!-- ════════════════════════════════════════ PIPELINE EXPLAINED -->
+    <h2>What's inside a video inference pipeline?</h2>
+
+    <p>
+      Before diving into numbers, it helps to understand the five stages every
+      frame passes through. Think of it like a factory assembly line — each
+      station transforms the data before passing it to the next.
+    </p>
+
+    <div class="diagram-wrap">
+      <svg
+        width="100%"
+        viewBox="0 0 820 180"
+        xmlns="http://www.w3.org/2000/svg"
+        style="min-width: 600px">
+        <defs>
+          <marker
+            id="arr"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto">
+            <path
+              d="M1 2L9 5L1 8"
+              fill="none"
+              stroke="#d1d5db"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round" />
+          </marker>
+        </defs>
+
+        <!-- Stage boxes -->
+        <!-- 1 Demux -->
+        <rect
+          x="10"
+          y="50"
+          width="130"
+          height="80"
+          rx="8"
+          fill="#f8f9fc"
+          stroke="#e2e6f0"
+          stroke-width="1" />
+        <rect x="10" y="50" width="130" height="4" rx="4" fill="#9ca3af" />
+        <text
+          x="75"
+          y="95"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="13"
+          font-weight="700"
+          fill="#374151">
+          Demux
+        </text>
+        <text
+          x="75"
+          y="113"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="10"
+          fill="#9ca3af">
+          CPU / FFmpeg
+        </text>
+
+        <!-- arrow -->
+        <line
+          x1="140"
+          y1="90"
+          x2="168"
+          y2="90"
+          stroke="#d1d5db"
+          stroke-width="1.5"
+          marker-end="url(#arr)" />
+
+        <!-- 2 Decode -->
+        <rect
+          x="170"
+          y="50"
+          width="130"
+          height="80"
+          rx="8"
+          fill="#eff6ff"
+          stroke="#bfdbfe"
+          stroke-width="1" />
+        <rect x="170" y="50" width="130" height="4" rx="4" fill="#3b82f6" />
+        <text
+          x="235"
+          y="95"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="13"
+          font-weight="700"
+          fill="#1e40af">
+          Decode
+        </text>
+        <text
+          x="235"
+          y="113"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="10"
+          fill="#3b82f6">
+          NVDEC
+        </text>
+
+        <!-- arrow -->
+        <line
+          x1="300"
+          y1="90"
+          x2="328"
+          y2="90"
+          stroke="#d1d5db"
+          stroke-width="1.5"
+          marker-end="url(#arr)" />
+
+        <!-- 3 Preprocess -->
+        <rect
+          x="330"
+          y="50"
+          width="130"
+          height="80"
+          rx="8"
+          fill="#fffbeb"
+          stroke="#fde68a"
+          stroke-width="1" />
+        <rect x="330" y="50" width="130" height="4" rx="4" fill="#f59e0b" />
+        <text
+          x="395"
+          y="95"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="13"
+          font-weight="700"
+          fill="#92400e">
+          Preprocess
+        </text>
+        <text
+          x="395"
+          y="113"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="10"
+          fill="#b45309">
+          GPU cores
+        </text>
+
+        <!-- arrow -->
+        <line
+          x1="460"
+          y1="90"
+          x2="488"
+          y2="90"
+          stroke="#d1d5db"
+          stroke-width="1.5"
+          marker-end="url(#arr)" />
+
+        <!-- 4 Inference -->
+        <rect
+          x="490"
+          y="50"
+          width="130"
+          height="80"
+          rx="8"
+          fill="#f0fdf4"
+          stroke="#bbf7d0"
+          stroke-width="1" />
+        <rect x="490" y="50" width="130" height="4" rx="4" fill="#16a34a" />
+        <text
+          x="555"
+          y="95"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="13"
+          font-weight="700"
+          fill="#14532d">
+          Inference
+        </text>
+        <text
+          x="555"
+          y="113"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="10"
+          fill="#16a34a">
+          YOLO / GPU
+        </text>
+
+        <!-- arrow -->
+        <line
+          x1="620"
+          y1="90"
+          x2="648"
+          y2="90"
+          stroke="#d1d5db"
+          stroke-width="1.5"
+          marker-end="url(#arr)" />
+
+        <!-- 5 Postprocess -->
+        <rect
+          x="650"
+          y="50"
+          width="130"
+          height="80"
+          rx="8"
+          fill="#faf5ff"
+          stroke="#e9d5ff"
+          stroke-width="1" />
+        <rect x="650" y="50" width="130" height="4" rx="4" fill="#9333ea" />
+        <text
+          x="715"
+          y="95"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="13"
+          font-weight="700"
+          fill="#581c87">
+          Postprocess
+        </text>
+        <text
+          x="715"
+          y="113"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="10"
+          fill="#9333ea">
+          PyTorch
+        </text>
+
+        <!-- Labels below -->
+        <text
+          x="75"
+          y="155"
+          text-anchor="middle"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          Split streams
+        </text>
+        <text
+          x="235"
+          y="155"
+          text-anchor="middle"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          Raw frames
+        </text>
+        <text
+          x="395"
+          y="155"
+          text-anchor="middle"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          Resize/norm
+        </text>
+        <text
+          x="555"
+          y="155"
+          text-anchor="middle"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          Predictions
+        </text>
+        <text
+          x="715"
+          y="155"
+          text-anchor="middle"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          Boxes/labels
+        </text>
+      </svg>
+    </div>
+
+    <p>
+      The bottleneck has historically been <strong>decode + preprocess</strong>.
+      When you use OpenCV, both of these run on the CPU, and every frame has to
+      make a round trip from GPU memory back to CPU and then back to GPU for
+      inference. That's a lot of wasted bus bandwidth. The entire point of the
+      DALI-style approach is to keep frames on the GPU from the moment they're
+      decoded.
+    </p>
+
+    <!-- ════════════════════════════════════════ TOOLS -->
+    <h2>The four pipelines I tested</h2>
+
+    <p>
+      Each pipeline represents a different philosophy about how to move video
+      through the system. Here's the lineup:
+    </p>
+
+    <!-- Pipeline comparison diagram -->
+    <div class="diagram-wrap">
+      <svg
+        width="100%"
+        viewBox="0 0 820 320"
+        xmlns="http://www.w3.org/2000/svg"
+        style="min-width: 620px">
+        <defs>
+          <marker
+            id="arr2"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="5"
+            markerHeight="5"
+            orient="auto">
+            <path
+              d="M1 2L9 5L1 8"
+              fill="none"
+              stroke="#374151"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round" />
+          </marker>
+        </defs>
+
+        <!-- Column headers -->
+        <text
+          x="10"
+          y="20"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#9ca3af">
+          Pipeline
+        </text>
+        <text
+          x="220"
+          y="20"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#9ca3af">
+          Decode
+        </text>
+        <text
+          x="380"
+          y="20"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#9ca3af">
+          Preprocess
+        </text>
+        <text
+          x="560"
+          y="20"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#9ca3af">
+          Inference
+        </text>
+        <line
+          x1="0"
+          y1="28"
+          x2="820"
+          y2="28"
+          stroke="#e2e6f0"
+          stroke-width="1" />
+
+        <!-- Row 1: OpenCV -->
+        <text
+          x="10"
+          y="65"
+          font-family="JetBrains Mono,monospace"
+          font-size="12"
+          font-weight="700"
+          fill="#b91c1c">
+          OpenCV CPU
+        </text>
+        <text
+          x="10"
+          y="82"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          Baseline
+        </text>
+        <rect
+          x="215"
+          y="46"
+          width="120"
+          height="32"
+          rx="6"
+          fill="#fee2e2"
+          stroke="#fca5a5"
+          stroke-width="1" />
+        <text
+          x="275"
+          y="67"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#991b1b">
+          CPU (cv2)
+        </text>
+        <rect
+          x="375"
+          y="46"
+          width="150"
+          height="32"
+          rx="6"
+          fill="#fee2e2"
+          stroke="#fca5a5"
+          stroke-width="1" />
+        <text
+          x="450"
+          y="67"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#991b1b">
+          CPU (cv2)
+        </text>
+        <rect
+          x="555"
+          y="46"
+          width="140"
+          height="32"
+          rx="6"
+          fill="#f0fdf4"
+          stroke="#86efac"
+          stroke-width="1" />
+        <text
+          x="625"
+          y="67"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#166534">
+          GPU (torch)
+        </text>
+
+        <line
+          x1="0"
+          y1="98"
+          x2="820"
+          y2="98"
+          stroke="#f1f4f9"
+          stroke-width="1" />
+
+        <!-- Row 2: DALI -->
+        <text
+          x="10"
+          y="133"
+          font-family="JetBrains Mono,monospace"
+          font-size="12"
+          font-weight="700"
+          fill="#1d4ed8">
+          FFmpeg + DALI
+        </text>
+        <text
+          x="10"
+          y="150"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          Article baseline
+        </text>
+        <rect
+          x="215"
+          y="114"
+          width="120"
+          height="32"
+          rx="6"
+          fill="#dbeafe"
+          stroke="#93c5fd"
+          stroke-width="1" />
+        <text
+          x="275"
+          y="135"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#1e40af">
+          NVDEC (DALI)
+        </text>
+        <rect
+          x="375"
+          y="114"
+          width="150"
+          height="32"
+          rx="6"
+          fill="#dbeafe"
+          stroke="#93c5fd"
+          stroke-width="1" />
+        <text
+          x="450"
+          y="135"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#1e40af">
+          GPU (torch)
+        </text>
+        <rect
+          x="555"
+          y="114"
+          width="140"
+          height="32"
+          rx="6"
+          fill="#f0fdf4"
+          stroke="#86efac"
+          stroke-width="1" />
+        <text
+          x="625"
+          y="135"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#166534">
+          GPU (torch)
+        </text>
+
+        <line
+          x1="0"
+          y1="166"
+          x2="820"
+          y2="166"
+          stroke="#f1f4f9"
+          stroke-width="1" />
+
+        <!-- Row 3: PyNvVideoCodec -->
+        <text
+          x="10"
+          y="201"
+          font-family="JetBrains Mono,monospace"
+          font-size="12"
+          font-weight="700"
+          fill="#0d7a63">
+          PyNvVideoCodec 2.1
+        </text>
+        <text
+          x="10"
+          y="218"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          NVIDIA 2025
+        </text>
+        <rect
+          x="215"
+          y="182"
+          width="120"
+          height="32"
+          rx="6"
+          fill="#d1fae5"
+          stroke="#6ee7b7"
+          stroke-width="1" />
+        <text
+          x="275"
+          y="203"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#065f46">
+          NVDEC direct
+        </text>
+        <rect
+          x="375"
+          y="182"
+          width="150"
+          height="32"
+          rx="6"
+          fill="#d1fae5"
+          stroke="#6ee7b7"
+          stroke-width="1" />
+        <text
+          x="450"
+          y="203"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#065f46">
+          GPU (torch)
+        </text>
+        <rect
+          x="555"
+          y="182"
+          width="140"
+          height="32"
+          rx="6"
+          fill="#f0fdf4"
+          stroke="#86efac"
+          stroke-width="1" />
+        <text
+          x="625"
+          y="203"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#166534">
+          GPU (torch)
+        </text>
+
+        <line
+          x1="0"
+          y1="234"
+          x2="820"
+          y2="234"
+          stroke="#f1f4f9"
+          stroke-width="1" />
+
+        <!-- Row 4: CV-CUDA -->
+        <text
+          x="10"
+          y="269"
+          font-family="JetBrains Mono,monospace"
+          font-size="12"
+          font-weight="700"
+          fill="#b45309">
+          PyNvVC + CV-CUDA
+        </text>
+        <text
+          x="10"
+          y="286"
+          font-family="DM Sans,sans-serif"
+          font-size="11"
+          fill="#9ca3af">
+          NVIDIA + ByteDance
+        </text>
+        <rect
+          x="215"
+          y="250"
+          width="120"
+          height="32"
+          rx="6"
+          fill="#fef3c7"
+          stroke="#fcd34d"
+          stroke-width="1" />
+        <text
+          x="275"
+          y="271"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#92400e">
+          NVDEC direct
+        </text>
+        <rect
+          x="375"
+          y="250"
+          width="150"
+          height="32"
+          rx="6"
+          fill="#fef3c7"
+          stroke="#fcd34d"
+          stroke-width="1" />
+        <text
+          x="450"
+          y="271"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#92400e">
+          CV-CUDA ops
+        </text>
+        <rect
+          x="555"
+          y="250"
+          width="140"
+          height="32"
+          rx="6"
+          fill="#f0fdf4"
+          stroke="#86efac"
+          stroke-width="1" />
+        <text
+          x="625"
+          y="271"
+          text-anchor="middle"
+          font-family="JetBrains Mono,monospace"
+          font-size="11"
+          fill="#166534">
+          GPU (torch)
+        </text>
+      </svg>
+    </div>
+
+    <h3>OpenCV CPU — the baseline everyone starts with</h3>
+    <p>
+      Most people's first video inference pipeline looks like this:
+      <code>cv2.VideoCapture</code> to read frames, <code>cv2.resize</code> to
+      scale them, then hand the result to a PyTorch model. It works. It's
+      simple. But it's also leaving most of your hardware idle — the GPU sits
+      waiting while the CPU decodes and resizes each frame one at a time.
+    </p>
+
+    <h3>FFmpeg + DALI — the 2022 state of the art</h3>
+    <p>
+      NVIDIA's Data Loading Library (DALI) was designed to fix exactly this. It
+      uses dedicated NVDEC hardware inside the GPU to decode video, then runs
+      resize and normalization on GPU cores — all without the frame ever
+      touching CPU memory. The article I mentioned used this approach and got
+      ~6× over OpenCV. DALI is powerful but opinionated: it has its own pipeline
+      definition language and works best with MP4 files and multiple-video
+      training scenarios.
+    </p>
+
+    <h3>PyNvVideoCodec 2.1 — the 2025 successor</h3>
+    <p>
+      Released in mid-2025 (with 2.1 dropping in January 2026), PyNvVideoCodec
+      is NVIDIA's official replacement for VPF (Video Processing Framework). It
+      gives you direct Python access to the NVDEC hardware with a much simpler
+      API than DALI — just <code>ThreadedDecoder</code>,
+      <code>get_batch_frames(n)</code>, and you're done. The key feature is the
+      <code>ThreadedDecoder</code>: it decodes in a background thread and
+      pre-buffers frames so your inference loop never waits for decode to
+      finish.
+    </p>
+
+    <h3>PyNvVideoCodec + CV-CUDA — fused GPU preprocessing</h3>
+    <p>
+      CV-CUDA is an open-source library (originally a collaboration between
+      NVIDIA and ByteDance) that provides GPU-accelerated image processing
+      operators — resize, normalize, color convert — as zero-copy operations.
+      The idea is to keep the entire pipeline on GPU with no intermediate CPU
+      copies. <code>cvcuda.resize</code> + <code>cvcuda.convertto</code> replace
+      <code>torch.nn.functional.interpolate</code> with purpose-built CUDA
+      kernels.
+    </p>
+
+    <!-- ════════════════════════════════════════ METHODOLOGY -->
+    <h2>How I benchmarked fairly</h2>
+
+    <p>
+      Getting a fair comparison between these libraries took more iteration than
+      I expected. The key challenge: they all have different APIs, and naively
+      wrapping them produced highly misleading numbers.
+    </p>
+
+    <p>
+      My solution:
+      <strong
+        >pre-decode all frames once at setup, cache them in GPU memory, then
+        benchmark only the preprocess → inference → postprocess loop.</strong
+      >
+      Decode time is measured separately as a single timed pass. This means:
+    </p>
+
+    <ul style="margin: 16px 0 16px 24px; color: #374151; line-height: 2">
+      <li>Every pipeline processes the exact same 512 frames</li>
+      <li>File I/O overhead doesn't contaminate the benchmark runs</li>
+      <li>Decode time is still captured honestly — once per pipeline</li>
+      <li>The loop timing reflects steady-state throughput</li>
+    </ul>
+
+    <div class="callout amber">
+      <span class="callout-label">Methodology note</span>
+      <p>
+        All pipelines used the same YOLOv8n model, same 640×640 input
+        resolution, FP16 inference, batch size 16, on an NVIDIA A100-SXM4-40GB
+        with PyTorch 2.6 + CUDA 12.4. Each pipeline ran 3 warmup iterations
+        before 10 timed benchmark runs.
+      </p>
+    </div>
+
+    <!-- ════════════════════════════════════════ RESULTS -->
+    <h2>Results</h2>
+
+    <div class="stats">
+      <div class="stat red">
+        <div class="stat-val">140</div>
+        <div class="stat-label">OpenCV FPS</div>
+      </div>
+      <div class="stat blue">
+        <div class="stat-val">379</div>
+        <div class="stat-label">DALI FPS</div>
+      </div>
+      <div class="stat green">
+        <div class="stat-val">431</div>
+        <div class="stat-label">PyNvVC FPS</div>
+      </div>
+      <div class="stat amber">
+        <div class="stat-val">414</div>
+        <div class="stat-label">CV-CUDA FPS</div>
+      </div>
+    </div>
+
+    <!-- Chart 1: FPS comparison -->
+    <div class="chart-wrap">
+      <div class="chart-title">
+        Fig 1 — End-to-end throughput (FPS) · higher is better
+      </div>
+      <canvas id="chart-fps"></canvas>
+    </div>
+
+    <p>
+      The headline number:
+      <strong
+        >PyNvVideoCodec 2.1 at 431 FPS is 3.1× faster than OpenCV CPU</strong
+      >
+      end-to-end. DALI comes in at 379 FPS (2.7×), and CV-CUDA at 414 FPS
+      (2.9×). All three GPU pipelines are firmly in the same ballpark, which
+      tells an interesting story — the bottleneck has shifted from
+      decode/preprocess to inference itself.
+    </p>
+
+    <!-- Chart 2: Stage breakdown -->
+    <div class="chart-wrap">
+      <div class="chart-title">
+        Fig 2 — Per-stage latency breakdown (avg over 10 runs)
+      </div>
+      <canvas id="chart-stages"></canvas>
+    </div>
+
+    <p>
+      This chart is where the real story lives. Look at how radically the time
+      distribution changes across pipelines:
+    </p>
+
+    <p>
+      <strong>OpenCV CPU</strong> spends 1.27s on preprocess — that's 35% of
+      total time just doing <code>cv2.resize</code> and
+      <code>cv2.cvtColor</code> on CPU. Inference on the GPU takes 1.47s on top
+      of that. The GPU is starved waiting for the CPU to finish prepping each
+      batch.
+    </p>
+
+    <p>
+      <strong>DALI and PyNvVideoCodec</strong> collapse preprocess time from
+      ~1.27s to ~0.054s — a 23× reduction. That single change accounts for most
+      of the 3× speedup. Inference time is nearly identical across all GPU
+      pipelines (~0.38–0.40s), which tells us that inference itself is not the
+      bottleneck once you stop starving the GPU.
+    </p>
+
+    <p>
+      <strong>CV-CUDA</strong> shaves preprocess down further to 0.043s, and
+      inference to 0.366s — the slightly faster inference likely reflects better
+      cache locality when the preprocessed tensors come from CV-CUDA's zero-copy
+      output rather than <code>torch.interpolate</code>.
+    </p>
+
+    <!-- Chart 3: Speedup waterfall -->
+    <div class="chart-wrap">
+      <div class="chart-title">Fig 3 — Speedup vs OpenCV CPU baseline</div>
+      <canvas id="chart-speedup"></canvas>
+    </div>
+
+    <!-- Chart 4: Decode comparison -->
+    <div class="chart-wrap">
+      <div class="chart-title">Fig 4 — Decode time (seconds, 512 frames)</div>
+      <canvas id="chart-decode"></canvas>
+    </div>
+
+    <p>
+      Decode times are interestingly close:
+      <strong
+        >0.74s for PyNvVideoCodec, 0.82s for CV-CUDA, 0.90s for DALI and
+        OpenCV</strong
+      >. The OpenCV result might surprise you — it's decoding 512 frames from a
+      960×540 MP4 file in 0.9s using CPU-only H.264 decoding, which is honestly
+      respectable. PyNvVideoCodec's 0.74s reflects the NVDEC hardware decoder
+      operating without the DALI pipeline overhead.
+    </p>
+
+    <!-- Detailed results table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Pipeline</th>
+            <th>Avg FPS</th>
+            <th>Total (s)</th>
+            <th>Decode (s)</th>
+            <th>Preprocess (s)</th>
+            <th>Inference (s)</th>
+            <th>Speedup</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge red">OpenCV CPU</span></td>
+            <td>140.1</td>
+            <td>3.655</td>
+            <td>0.905</td>
+            <td>1.268</td>
+            <td>1.472</td>
+            <td>1.0×</td>
+          </tr>
+          <tr>
+            <td><span class="badge blue">FFmpeg + DALI</span></td>
+            <td>379.2</td>
+            <td>1.350</td>
+            <td>0.903</td>
+            <td>0.054</td>
+            <td>0.386</td>
+            <td><strong>2.7×</strong></td>
+          </tr>
+          <tr>
+            <td><span class="badge green">PyNvVideoCodec 2.1</span></td>
+            <td>431.3</td>
+            <td>1.187</td>
+            <td>0.737</td>
+            <td>0.054</td>
+            <td>0.390</td>
+            <td><strong>3.1×</strong></td>
+          </tr>
+          <tr>
+            <td><span class="badge amber">PyNvVC + CV-CUDA</span></td>
+            <td>414.7</td>
+            <td>1.238</td>
+            <td>0.820</td>
+            <td>0.043</td>
+            <td>0.367</td>
+            <td><strong>2.9×</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ════════════════════════════════════════ INSIGHTS -->
+    <h2>What I learned</h2>
+
+    <h3>Preprocess is the real CPU bottleneck — not inference</h3>
+    <p>
+      Before running this benchmark, I assumed inference would dominate. It
+      doesn't. <code>cv2.resize</code> + <code>cv2.cvtColor</code> for 512
+      frames takes 1.27 seconds on CPU. The same operation on GPU takes 54
+      milliseconds. That 23× difference in preprocess is where most of the 3×
+      end-to-end gain comes from — not from faster decoding.
+    </p>
+
+    <h3>PyNvVideoCodec 2.1 is the right default for new projects</h3>
+    <p>
+      DALI is powerful but has a steep learning curve — its pipeline DSL is
+      non-trivial, it's sensitive to video container formats (MOV files caused
+      180-second decode times in my testing due to seeking behavior), and it's
+      overkill for single-video inference. PyNvVideoCodec 2.1 gives you direct
+      NVDEC access via a <code>pip install</code>, a simple Python API, and
+      performance that beats DALI in this benchmark. It's the better starting
+      point.
+    </p>
+
+    <div class="callout blue">
+      <span class="callout-label">Gotcha I hit</span>
+      <p>
+        PyNvVideoCodec's <code>ThreadedDecoder</code> documentation online
+        doesn't match the installed API on clusters. The actual interface is
+        <code>get_batch_frames(n)</code> + <code>end()</code>, not an iterator.
+        Always introspect with <code>dir(ThreadedDecoder)</code> on your target
+        machine before writing code.
+      </p>
+    </div>
+
+    <h3>CV-CUDA's advantage shows at larger batch sizes</h3>
+    <p>
+      At batch size 16, CV-CUDA's preprocessing is only marginally faster than
+      plain <code>torch.nn.functional.interpolate</code> (43ms vs 54ms).
+      CV-CUDA's fused kernel advantage is more pronounced at batch sizes of 64+
+      where the overhead of launching multiple separate CUDA kernels (for resize
+      and normalize separately) becomes significant. For production systems
+      processing high-throughput streams, CV-CUDA is worth profiling at your
+      actual batch size.
+    </p>
+
+    <h3>Inference is the new bottleneck</h3>
+    <p>
+      Once you move decode and preprocess to the GPU, inference itself becomes
+      the dominant cost (~0.37–0.40s for 32 batches of 16 frames). The next
+      logical optimization step is TensorRT — converting YOLOv8n to a TensorRT
+      FP16 engine typically halves inference time on A100, which would push
+      these pipelines toward 600-800 FPS.
+    </p>
+
+    <!-- ════════════════════════════════════════ CODE -->
+    <h2>The key code pattern</h2>
+
+    <p>
+      Here's the core of the PyNvVideoCodec pipeline — the part that actually
+      matters:
+    </p>
+
+    <pre><code><span class="cm"># Setup: decode once, cache in GPU memory</span>
+<span class="kw">from</span> PyNvVideoCodec <span class="kw">import</span> ThreadedDecoder, OutputColorType
+
+dec = ThreadedDecoder(
+    video_path,
+    512 * 2,          <span class="cm"># buffer_size — required positional arg</span>
+    gpu_id=0,
+    output_color_type=OutputColorType.RGB,  <span class="cm"># interleaved HWC</span>
+)
+all_frames = dec.get_batch_frames(512)
+dec.end()
+
+<span class="cm"># Benchmark loop: preprocess → infer → postprocess</span>
+<span class="kw">for</span> batch_hwc <span class="kw">in</span> batches:
+    <span class="cm"># [B, H, W, C] uint8 → [B, C, H, W] float32</span>
+    f = batch_hwc.float().div(255.0).permute(0,3,1,2).contiguous()
+    f = torch.nn.functional.interpolate(
+        f, size=(640, 640), mode=<span class="str">"bilinear"</span>, align_corners=False
+    )
+    results = model(f, verbose=False, half=True)</code></pre>
+
+    <p>And the CV-CUDA variant, which replaces the preprocess step:</p>
+
+    <pre><code><span class="kw">import</span> cvcuda
+
+nhwc     = batch_hwc.float().div(255.0).contiguous()
+ct       = cvcuda.as_tensor(nhwc, <span class="str">"NHWC"</span>)           <span class="cm"># zero-copy</span>
+resized  = cvcuda.resize(ct, (N, 640, 640, 3), cvcuda.Interp.LINEAR)
+normed   = cvcuda.convertto(resized, cvcuda.Type.F32, scale=1.0/255.0)
+final    = torch.as_tensor(normed.cuda()).permute(0,3,1,2).contiguous()</code></pre>
+
+    <!-- ════════════════════════════════════════ TAKEAWAYS -->
+    <h2>Summary</h2>
+
+    <div class="callout">
+      <span class="callout-label">TL;DR</span>
+      <p>
+        Moving preprocess from CPU to GPU gives you the bulk of the speedup (23×
+        on preprocess alone). PyNvVideoCodec 2.1 is the most practical choice
+        for 2025/2026 — simpler API than DALI, faster decode, pip-installable.
+        CV-CUDA adds a small preprocess edge. All GPU pipelines are 2.7–3.1×
+        faster than OpenCV CPU end-to-end on A100.
+      </p>
+    </div>
+
+    <p>
+      The
+      <a
+        href="https://www.linkedin.com/pulse/understanding-video-inference-pipeline-dali-ffmpeg-opencv-chang-zen-v0qlc"
+        >article</a
+      >
+      that inspired this benchmark showed a 5.9× speedup for a specific TSMC
+      workload with DALI. My numbers are more modest (2.7–3.1×) — the difference
+      is that my benchmark includes a pre-decode step measured fairly, and uses
+      a relatively short video where file I/O is less dominant. For longer
+      videos and higher-resolution content, the GPU pipelines' advantages
+      compound further.
+    </p>
+
+    <p>
+      If you're starting a video inference project today: skip OpenCV for
+      anything performance-sensitive, use PyNvVideoCodec 2.1 as your decoder,
+      and profile CV-CUDA preprocessing at your target batch size. If you need
+      TensorRT inference, that's the remaining 2× sitting on the table.
+    </p>
+
+    <p>
+      All benchmark code is available
+      <u>
+        <a href="https://github.com/YashJain14/video-inference-benchmark"
+          >here</a
+        ></u
+      >
+      — the harness handles pre-decode caching, per-stage timing with CUDA
+      synchronization, CSV export, and chart generation automatically.
+    </p>
+
+    <hr class="divider" />
+
+    <!-- <footer>
+      <span
+        >Yash Jain · Benchmarked on NSCC Singapore · A100-SXM4-40GB · April
+        2026</span
+      >
+      <span>PyTorch 2.6 · CUDA 12.4 · YOLOv8n · 512 frames</span>
+    </footer> -->
+
+    <script>
+      // ── Data ──────────────────────────────────────────────────────────────────
+      const pipelines = [
+        "OpenCV CPU",
+        "FFmpeg + DALI",
+        "PyNvVideoCodec 2.1",
+        "PyNvVC + CV-CUDA",
+      ];
+      const colors = {
+        red: { border: "#dc2626", bg: "rgba(220,38,38,0.12)" },
+        blue: { border: "#2563eb", bg: "rgba(37,99,235,0.12)" },
+        green: { border: "#059669", bg: "rgba(5,150,105,0.12)" },
+        amber: { border: "#d97706", bg: "rgba(217,119,6,0.12)" },
+      };
+      const pipeColors = [colors.red, colors.blue, colors.green, colors.amber];
+
+      const avgFPS = [140.1, 379.2, 431.3, 414.7];
+      const totalS = [3.655, 1.35, 1.187, 1.238];
+      const decodeS = [0.905, 0.903, 0.737, 0.82];
+      const preprocessS = [1.268, 0.054, 0.054, 0.043];
+      const inferenceS = [1.472, 0.386, 0.39, 0.367];
+      const postS = [0.006, 0.006, 0.006, 0.005];
+      const speedup = [1.0, 2.7, 3.1, 2.9];
+
+      // ── Chart defaults ────────────────────────────────────────────────────────
+      Chart.defaults.color = "#6b7280";
+      Chart.defaults.font.family = "'JetBrains Mono', monospace";
+      Chart.defaults.font.size = 11;
+
+      const gridOpts = {
+        color: "rgba(226,230,240,1)",
+        drawBorder: false,
+      };
+      const pluginLegend = { display: false };
+
+      // ── Chart 1: FPS bar ─────────────────────────────────────────────────────
+      new Chart(document.getElementById("chart-fps"), {
+        type: "bar",
+        data: {
+          labels: pipelines,
+          datasets: [
+            {
+              data: avgFPS,
+              backgroundColor: pipeColors.map((c) => c.bg),
+              borderColor: pipeColors.map((c) => c.border),
+              borderWidth: 2,
+              borderRadius: 6,
+              borderSkipped: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: pluginLegend,
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.parsed.y.toFixed(1)} FPS`,
+              },
+            },
+            datalabels: false,
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: {
+              grid: gridOpts,
+              title: {
+                display: true,
+                text: "Frames per second",
+                color: "#4b5563",
+              },
+              beginAtZero: true,
+            },
+          },
+        },
+      });
+
+      // ── Chart 2: Stacked stage breakdown ─────────────────────────────────────
+      new Chart(document.getElementById("chart-stages"), {
+        type: "bar",
+        data: {
+          labels: pipelines,
+          datasets: [
+            {
+              label: "Decode",
+              data: decodeS,
+              backgroundColor: "rgba(59,130,246,0.7)",
+              borderColor: "#3b82f6",
+              borderWidth: 1,
+              borderRadius: 0,
+            },
+            {
+              label: "Preprocess",
+              data: preprocessS,
+              backgroundColor: "rgba(245,158,11,0.7)",
+              borderColor: "#f59e0b",
+              borderWidth: 1,
+            },
+            {
+              label: "Inference",
+              data: inferenceS,
+              backgroundColor: "rgba(0,217,163,0.7)",
+              borderColor: "#00d9a3",
+              borderWidth: 1,
+            },
+            {
+              label: "Postprocess",
+              data: postS,
+              backgroundColor: "rgba(167,139,250,0.7)",
+              borderColor: "#a78bfa",
+              borderWidth: 1,
+              borderRadius: { topLeft: 6, topRight: 6 },
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: "bottom",
+              labels: {
+                usePointStyle: true,
+                pointStyle: "rect",
+                padding: 20,
+                color: "#6b7280",
+              },
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) =>
+                  ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(3)}s`,
+              },
+            },
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: {
+              stacked: true,
+              grid: gridOpts,
+              title: {
+                display: true,
+                text: "Time (seconds)",
+                color: "#4b5563",
+              },
+            },
+          },
+        },
+      });
+
+      // ── Chart 3: Speedup horizontal bar ──────────────────────────────────────
+      new Chart(document.getElementById("chart-speedup"), {
+        type: "bar",
+        data: {
+          labels: pipelines,
+          datasets: [
+            {
+              data: speedup,
+              backgroundColor: pipeColors.map((c) => c.bg),
+              borderColor: pipeColors.map((c) => c.border),
+              borderWidth: 2,
+              borderRadius: 6,
+              borderSkipped: false,
+            },
+          ],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          plugins: {
+            legend: pluginLegend,
+            tooltip: {
+              callbacks: {
+                label: (ctx) =>
+                  ` ${ctx.parsed.x.toFixed(1)}× faster than OpenCV CPU`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: gridOpts,
+              title: { display: true, text: "Speedup (×)", color: "#4b5563" },
+              min: 0,
+              max: 4,
+            },
+            y: { grid: { display: false } },
+          },
+        },
+      });
+
+      // ── Chart 4: Decode time ──────────────────────────────────────────────────
+      new Chart(document.getElementById("chart-decode"), {
+        type: "bar",
+        data: {
+          labels: pipelines,
+          datasets: [
+            {
+              data: decodeS,
+              backgroundColor: pipeColors.map((c) => c.bg),
+              borderColor: pipeColors.map((c) => c.border),
+              borderWidth: 2,
+              borderRadius: 6,
+              borderSkipped: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: pluginLegend,
+            tooltip: {
+              callbacks: {
+                label: (ctx) =>
+                  ` ${ctx.parsed.y.toFixed(3)}s to decode 512 frames`,
+              },
+            },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              grid: gridOpts,
+              title: {
+                display: true,
+                text: "Decode time (s)",
+                color: "#4b5563",
+              },
+              beginAtZero: true,
+            },
+          },
+        },
+      });
+    </script>
+  </body>
+</html>
