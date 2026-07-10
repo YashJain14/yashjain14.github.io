@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weave-safe resize — jacquard BMP tool</title>
+<style>
+  :root{
+    --paper:#FAFAF5;
+    --grid:rgba(44,75,201,.07);
+    --ink:#17212E;
+    --ink-soft:#5A6473;
+    --warp:#2C4BC9;      /* warp-thread indigo */
+    --weft:#B9861F;      /* weft ochre */
+    --alarm:#A33B2E;
+    --card:#FFFFFF;
+    --line:#D9DBD2;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--paper);
+    /* point-paper grid, the designer's native surface */
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:24px 24px;
+    line-height:1.5;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:40px 20px 80px}
+  header{margin-bottom:28px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--warp);text-transform:uppercase}
+  h1{font-family:var(--mono);font-weight:600;font-size:clamp(22px,4vw,32px);letter-spacing:-.01em;margin:.2em 0 .25em}
+  header p{margin:0;color:var(--ink-soft);max-width:62ch;font-size:14.5px}
+  header p b{color:var(--ink);font-weight:600}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:20px;margin-top:18px;box-shadow:0 1px 2px rgba(23,33,46,.04)}
+  .card h2{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 14px;display:flex;align-items:center;gap:10px}
+  .card h2::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  /* drop zone */
+  #drop{border:1.5px dashed var(--warp);border-radius:6px;background:rgba(44,75,201,.03);
+        padding:36px 20px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s}
+  #drop.hover{background:rgba(44,75,201,.09)}
+  #drop .big{font-family:var(--mono);font-size:15px}
+  #drop .small{color:var(--ink-soft);font-size:13px;margin-top:6px}
+  #file{display:none}
+
+  /* report grid */
+  .report{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 22px;font-family:var(--mono);font-size:13.5px}
+  .report .k{color:var(--ink-soft);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  .report .v{margin-top:2px}
+  .report .v em{font-style:normal;color:var(--warp);font-weight:600}
+  .spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin-top:6px}
+  .spark i{display:block;width:8px;background:var(--line);border-radius:1px 1px 0 0}
+  .spark i.on{background:var(--warp)}
+  .sparklab{font-size:10.5px;color:var(--ink-soft);margin-top:3px}
+
+  .warn{margin-top:14px;padding:10px 14px;border-left:3px solid var(--alarm);background:rgba(163,59,46,.06);
+        font-size:13.5px;color:var(--alarm)}
+  .note{margin-top:10px;font-size:13px;color:var(--ink-soft)}
+
+  /* controls */
+  .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px}
+  .field label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px}
+  .field input[type=number]{font-family:var(--mono);font-size:15px;padding:8px 10px;width:110px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}
+  .field input[type=number]:focus{outline:2px solid var(--warp);outline-offset:1px;border-color:transparent}
+  .x{font-family:var(--mono);padding-bottom:10px;color:var(--ink-soft)}
+  .chk{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;max-width:340px;padding-bottom:2px}
+  .chk input{margin-top:3px;accent-color:var(--warp)}
+  .chk .sub{color:var(--ink-soft);font-size:12px}
+  button{font-family:var(--mono);font-size:14px;letter-spacing:.04em;padding:10px 22px;border-radius:4px;border:1px solid var(--warp);
+         background:var(--warp);color:#fff;cursor:pointer}
+  button:hover{background:#2340AE}
+  button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  button[disabled]{opacity:.45;cursor:default}
+  button.ghost{background:transparent;color:var(--warp)}
+  button.ghost:hover{background:rgba(44,75,201,.07)}
+
+  /* results */
+  .checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 22px;font-family:var(--mono);font-size:13.5px;margin-bottom:16px}
+  .previews{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.previews{grid-template-columns:1fr}}
+  figure{margin:0}
+  figcaption{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px;display:flex;justify-content:space-between}
+  .frame{position:relative;border:1px solid var(--line);background:
+      repeating-conic-gradient(#EDEDE6 0 25%, #fff 0 50%) 0 0/16px 16px}
+  .frame canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+  .frame .gridlay{position:absolute;inset:0;pointer-events:none;display:none}
+  .frame.showgrid .gridlay{display:block}
+  .resline{font-family:var(--mono);font-size:13px;margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+  .ok{color:#22713A}.bad{color:var(--alarm)}
+  #status{font-family:var(--mono);font-size:12.5px;color:var(--weft);margin-top:10px;min-height:1.2em}
+  .hidden{display:none}
+  footer{margin-top:34px;font-size:12px;color:var(--ink-soft);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Jacquard tooling · point paper</div>
+    <h1>Weave-safe resize</h1>
+    <p>Resizes a colour-quantized, indexed <b>BMP</b> without breaking the weave. The tool detects the
+    interlacing repeat and pick/warp parity, then resamples <b>phase-locked to that grid</b> — every output
+    pixel copies a source pixel at the same weave phase, so over/under structure and the exact palette survive.
+    Runs entirely in your browser; the file never leaves this page.</p>
+  </header>
+
+  <div class="card">
+    <div id="drop" tabindex="0" role="button" aria-label="Choose a BMP file">
+      <div class="big">Drop an indexed BMP here — or click to choose</div>
+      <div class="small">1 / 4 / 8-bit uncompressed BMP, palette ≤ 16 colours recommended</div>
+    </div>
+    <input type="file" id="file" accept=".bmp,image/bmp">
+    <div id="loaderr" class="warn hidden"></div>
+  </div>
+
+  <div class="card hidden" id="analysisCard">
+    <h2>Weave analysis</h2>
+    <div class="report" id="report"></div>
+    <div id="lowconf" class="warn hidden"></div>
+  </div>
+
+  <div class="card hidden" id="resizeCard">
+    <h2>Resize</h2>
+    <div class="controls">
+      <div class="field"><label for="tw">Target width px</label><input type="number" id="tw" min="1" step="1"></div>
+      <div class="x">×</div>
+      <div class="field"><label for="th">Target height px</label><input type="number" id="th" min="1" step="1"></div>
+      <label class="chk"><input type="checkbox" id="smooth">
+        <span>Smooth boundaries<br><span class="sub">Reduces repeat-sized edge steps to ~1&nbsp;px by nudging design
+        boundaries. Edits pixels, so it slightly degrades the weave near edges — only if colour is free per knot.</span></span>
+      </label>
+      <button id="go">Resize</button>
+    </div>
+    <div class="note">Output snaps to the repeat grid, so the produced size may differ from the request by a few pixels.</div>
+    <div id="status" aria-live="polite"></div>
+  </div>
+
+  <div class="card hidden" id="resultCard">
+    <h2>Result</h2>
+    <div class="checks" id="checks"></div>
+    <div class="previews">
+      <figure>
+        <figcaption><span>Source</span><span id="srcdim"></span></figcaption>
+        <div class="frame" id="srcframe"><canvas id="srccv"></canvas><div class="gridlay" id="srcgrid"></div></div>
+      </figure>
+      <figure>
+        <figcaption><span>Output</span><span id="outdim"></span></figcaption>
+        <div class="frame" id="outframe"><canvas id="outcv"></canvas><div class="gridlay" id="outgrid"></div></div>
+      </figure>
+    </div>
+    <div class="resline">
+      <button id="dl">Download BMP</button>
+      <label class="chk" style="padding:0"><input type="checkbox" id="showgrid"> <span>Show repeat grid</span></label>
+    </div>
+  </div>
+
+  <footer>weave_resize · phase-locked block resampling · palette preserved exactly</footer>
+</div>
+
+<script>
+"use strict";
+/* ============================ CORE (port of weave_resize.py) ============================ */
+
+// ---- BMP parse: indexed 1/4/8-bit, uncompressed --------------------------------------
+function parseBMP(buf){
+  const dv = new DataView(buf);
+  if (buf.byteLength < 54 || dv.getUint16(0, true) !== 0x4D42)
+    throw new Error("Not a BMP file.");
+  const dataOffset = dv.getUint32(10, true);
+  const hdr = dv.getUint32(14, true);
+  if (hdr < 40) throw new Error("Old BITMAPCOREHEADER BMPs are not supported.");
+  const width = dv.getInt32(18, true);
+  let height = dv.getInt32(22, true);
+  const bpp = dv.getUint16(28, true);
+  const comp = dv.getUint32(30, true);
+  if (bpp > 8)
+    throw new Error("This file is " + bpp + "-bit truecolour; expected an indexed (paletted) BMP. Weave files must be colour-quantized.");
+  if (comp !== 0)
+    throw new Error("Compressed BMP (RLE) is not supported — re-save as uncompressed.");
+  const topDown = height < 0; height = Math.abs(height);
+  if (width <= 0 || height <= 0) throw new Error("Bad BMP dimensions.");
+  let clrUsed = dv.getUint32(46, true) || (1 << bpp);
+  clrUsed = Math.min(clrUsed, 256);
+  const palOff = 14 + hdr;
+  const pal = new Uint8Array(256 * 3);            // flat RGB, PIL-style
+  for (let i = 0; i < clrUsed; i++){
+    pal[i*3]   = dv.getUint8(palOff + i*4 + 2);   // R (BMP stores BGRA)
+    pal[i*3+1] = dv.getUint8(palOff + i*4 + 1);   // G
+    pal[i*3+2] = dv.getUint8(palOff + i*4);       // B
+  }
+  const stride = ((width * bpp + 31) >> 5) * 4;
+  if (dataOffset + stride * height > buf.byteLength) throw new Error("Truncated BMP data.");
+  const idx = new Uint8Array(width * height);
+  const bytes = new Uint8Array(buf);
+  for (let row = 0; row < height; row++){
+    const srcRow = topDown ? row : (height - 1 - row);
+    const off = dataOffset + srcRow * stride;
+    const dst = row * width;
+    if (bpp === 8){
+      idx.set(bytes.subarray(off, off + width), dst);
+    } else if (bpp === 4){
+      for (let x = 0; x < width; x++){
+        const b = bytes[off + (x >> 1)];
+        idx[dst + x] = (x & 1) ? (b & 0x0F) : (b >> 4);
+      }
+    } else { // 1-bit
+      for (let x = 0; x < width; x++){
+        idx[dst + x] = (bytes[off + (x >> 3)] >> (7 - (x & 7))) & 1;
+      }
+    }
+  }
+  return { idx, W: width, H: height, pal };
+}
+
+function countColours(idx){
+  const seen = new Uint8Array(256); let n = 0;
+  for (let i = 0; i < idx.length; i++){ const v = idx[i]; if (!seen[v]){ seen[v] = 1; n++; } }
+  return n;
+}
+function usedColours(idx){
+  const seen = new Uint8Array(256);
+  for (let i = 0; i < idx.length; i++) seen[idx[i]] = 1;
+  const u = []; for (let v = 0; v < 256; v++) if (seen[v]) u.push(v);
+  return u;
+}
+
+// ---- Repeat / parity detection --------------------------------------------------------
+// Fraction of pixels identical to the image shifted by k along axis (1=cols/warp, 0=rows/weft).
+// Perpendicular axis is subsampled on large images to cap work; the shift axis stays exact.
+function shiftMatch(idx, W, H, axis, kmax){
+  const s = {};
+  const CAP = 2.0e6;
+  for (let k = 1; k <= kmax; k++){
+    let same = 0, tot = 0;
+    if (axis === 1){
+      const span = W - k;
+      const step = Math.max(1, Math.floor((H * span) / CAP));
+      for (let y = 0; y < H; y += step){
+        const b = y * W;
+        for (let x = 0; x < span; x++) if (idx[b + x] === idx[b + x + k]) same++;
+        tot += span;
+      }
+    } else {
+      const span = H - k;
+      const step = Math.max(1, Math.floor((span * W) / CAP));
+      for (let y = 0; y < span; y += step){
+        const a = y * W, b = (y + k) * W;
+        for (let x = 0; x < W; x++) if (idx[a + x] === idx[b + x]) same++;
+        tot += W;
+      }
+    }
+    s[k] = tot ? same / tot : 0;
+  }
+  return s;
+}
+
+function detectAxisRepeat(idx, W, H, axis, kmax){
+  kmax = kmax || 16;
+  const s = shiftMatch(idx, W, H, axis, kmax);
+  const m = []; for (let k = 1; k <= kmax; k++) m.push(s[k]);
+
+  // parity: do even lags beat odd lags consistently? (pick-and-pick / 2-thread)
+  let even = 0, ne = 0, odd = 0, no = 0;
+  for (let k = 1; k <= kmax; k++){
+    if (k % 2 === 0){ even += s[k]; ne++; } else { odd += s[k]; no++; }
+  }
+  even /= ne; odd /= no;
+  const parity = (even > odd + 0.03) ? 2 : 1;
+
+  // smallest lag (multiple of parity) whose self-similarity is within tol of the best
+  const tol = 0.03;
+  const cands = [];
+  for (let P = parity; P <= Math.floor(kmax / 2); P += parity) cands.push(P);
+  if (!cands.length) cands.push(parity);
+  let best = -Infinity;
+  for (const P of cands) if (s[P] > best) best = s[P];
+  let repeat = cands[cands.length - 1];
+  for (const P of cands) if (s[P] >= best - tol){ repeat = P; break; }
+
+  const off = [];
+  for (let k = 1; k <= kmax; k++) if (k % repeat !== 0) off.push(s[k]);
+  const offMean = off.length ? off.reduce((a,b)=>a+b,0)/off.length : 0;
+  const strength = s[repeat] - offMean;
+  const confidence = Math.max(0, Math.min(1, 0.35 * s[repeat] + 2.2 * Math.max(0, strength)));
+
+  return {
+    repeat, parity,
+    strength: Math.round(strength * 1000) / 1000,
+    confidence: Math.round(confidence * 100) / 100,
+    matchAtRepeat: Math.round(s[repeat] * 1000) / 1000,
+    curve: s
+  };
+}
+
+function analyze(idx, W, H){
+  const ax = detectAxisRepeat(idx, W, H, 1);   // horizontal / warp / columns
+  const ay = detectAxisRepeat(idx, W, H, 0);   // vertical / weft / rows
+  const Px = ax.repeat, Py = ay.repeat;
+  return {
+    W, H, Px, Py, ax, ay,
+    tailX: W % Px, tailY: H % Py,
+    blocksX: Math.floor(W / Px), blocksY: Math.floor(H / Py)
+  };
+}
+
+// ---- Phase-locked whole-block resampling ----------------------------------------------
+// Monotonic, weave-valid source index for each output index along one axis.
+function phaseLockedAxis(lengthIn, lengthOut, P){
+  const nin = Math.max(1, Math.floor(lengthIn / P));
+  const src = new Int32Array(lengthOut);
+  const nout = Math.floor((lengthOut - 1) / P) + 1;
+  for (let o = 0; o < lengthOut; o++){
+    const phase = o % P, oblock = Math.floor(o / P);
+    let sblock = (nout > 1) ? Math.round(oblock * (nin - 1) / (nout - 1)) : 0;
+    sblock = Math.min(Math.max(sblock, 0), nin - 1);
+    let v = sblock * P + phase;
+    src[o] = Math.min(Math.max(v, 0), lengthIn - 1);
+  }
+  return src;
+}
+
+function phaseLockedResize(idx, W, H, tw, th, Px, Py){
+  const sx = phaseLockedAxis(W, tw, Px);
+  const sy = phaseLockedAxis(H, th, Py);
+  const out = new Uint8Array(tw * th);
+  for (let y = 0; y < th; y++){
+    const srow = sy[y] * W, drow = y * tw;
+    for (let x = 0; x < tw; x++) out[drow + x] = idx[srow + sx[x]];
+  }
+  return out;
+}
+
+function verifyRepeat(idx, W, H, P, axis){
+  let same = 0, tot = 0;
+  if (axis === 1){
+    for (let y = 0; y < H; y++){
+      const b = y * W;
+      for (let x = 0; x < W - P; x++) if (idx[b + x] === idx[b + x + P]) same++;
+      tot += W - P;
+    }
+  } else {
+    for (let y = 0; y < H - P; y++){
+      const a = y * W, b = (y + P) * W;
+      for (let x = 0; x < W; x++) if (idx[a + x] === idx[b + x]) same++;
+      tot += W;
+    }
+  }
+  return Math.round((tot ? same / tot : 0) * 1000) / 1000;
+}
+
+// ---- Optional boundary smoothing (opt-in; edits pixels) --------------------------------
+function idxToRGBFloat(idx, W, H, pal){
+  const n = W * H;
+  const r = new Float32Array(n), g = new Float32Array(n), b = new Float32Array(n);
+  for (let i = 0; i < n; i++){
+    const p = idx[i] * 3;
+    r[i] = pal[p]; g[i] = pal[p + 1]; b[i] = pal[p + 2];
+  }
+  return [r, g, b];
+}
+
+function gaussianBlur1D(srcChan, W, H, sigma){
+  const rad = Math.max(1, Math.ceil(sigma * 3));
+  const kern = new Float32Array(2 * rad + 1);
+  let ks = 0;
+  for (let i = -rad; i <= rad; i++){ const v = Math.exp(-(i*i)/(2*sigma*sigma)); kern[i+rad] = v; ks += v; }
+  for (let i = 0; i < kern.length; i++) kern[i] /= ks;
+  const tmp = new Float32Array(W * H), out = new Float32Array(W * H);
+  for (let y = 0; y < H; y++){           // horizontal pass
+    const row = y * W;
+    for (let x = 0; x < W; x++){
+      let acc = 0;
+      for (let i = -rad; i <= rad; i++){
+        let xx = x + i; if (xx < 0) xx = 0; else if (xx >= W) xx = W - 1;
+        acc += srcChan[row + xx] * kern[i + rad];
+      }
+      tmp[row + x] = acc;
+    }
+  }
+  for (let y = 0; y < H; y++){           // vertical pass
+    for (let x = 0; x < W; x++){
+      let acc = 0;
+      for (let i = -rad; i <= rad; i++){
+        let yy = y + i; if (yy < 0) yy = 0; else if (yy >= H) yy = H - 1;
+        acc += tmp[yy * W + x] * kern[i + rad];
+      }
+      out[y * W + x] = acc;
+    }
+  }
+  return out;
+}
+
+// Per-pixel design region (dominant colour): blur away the melange, snap to nearest used palette colour.
+function regionMap(a, W, H, pal, used, radius){
+  const [r, g, b] = idxToRGBFloat(a, W, H, pal);
+  const rb = gaussianBlur1D(r, W, H, radius);
+  const gb = gaussianBlur1D(g, W, H, radius);
+  const bb = gaussianBlur1D(b, W, H, radius);
+  const out = new Uint8Array(W * H);
+  const ur = used.map(v => pal[v*3]), ug = used.map(v => pal[v*3+1]), ub = used.map(v => pal[v*3+2]);
+  for (let i = 0; i < W * H; i++){
+    let bi = 0, bd = Infinity;
+    for (let c = 0; c < used.length; c++){
+      const dr = rb[i]-ur[c], dg = gb[i]-ug[c], db = bb[i]-ub[c];
+      const d = dr*dr + dg*dg + db*db;
+      if (d < bd){ bd = d; bi = c; }
+    }
+    out[i] = used[bi];
+  }
+  return out;
+}
+
+const NBRS = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,-1],[1,-1],[-1,1]];
+function smoothBoundaries(out, W, H, pal, iters){
+  iters = iters || 4;
+  const used = usedColours(out);
+  const cur = regionMap(out, W, H, pal, used, 1.4);
+  const smooth = regionMap(out, W, H, pal, used, 4.5);
+  const corr = out.slice();
+  const mism = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) mism[i] = cur[i] !== smooth[i] ? 1 : 0;
+  for (let it = 0; it < iters; it++){
+    let any = false;
+    const moved = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++){
+      for (let x = 0; x < W; x++){
+        const i = y * W + x;
+        if (!mism[i]) continue;
+        any = true;
+        const tgt = smooth[i];
+        for (const [dy, dx] of NBRS){
+          const ny = y + dy, nx = x + dx;
+          if (ny < 0 || ny >= H || nx < 0 || nx >= W) continue;
+          const j = ny * W + nx;
+          if (cur[j] === tgt && !mism[j]){ corr[i] = out[j]; moved[i] = 1; break; }
+        }
+      }
+    }
+    if (!any) break;
+    for (let i = 0; i < W * H; i++){
+      if (moved[i]) cur[i] = smooth[i];
+      mism[i] = cur[i] !== smooth[i] ? 1 : 0;
+    }
+  }
+  return corr;
+}
+
+// ---- BMP write: 8-bit indexed, full 256-entry palette ----------------------------------
+function writeBMP(idx, W, H, pal){
+  const stride = (W + 3) & ~3;
+  const palBytes = 256 * 4;
+  const off = 14 + 40 + palBytes;
+  const size = off + stride * H;
+  const buf = new ArrayBuffer(size);
+  const dv = new DataView(buf);
+  const bytes = new Uint8Array(buf);
+  dv.setUint16(0, 0x4D42, true);
+  dv.setUint32(2, size, true);
+  dv.setUint32(10, off, true);
+  dv.setUint32(14, 40, true);
+  dv.setInt32(18, W, true);
+  dv.setInt32(22, H, true);           // bottom-up
+  dv.setUint16(26, 1, true);
+  dv.setUint16(28, 8, true);
+  dv.setUint32(30, 0, true);          // BI_RGB
+  dv.setUint32(34, stride * H, true);
+  dv.setInt32(38, 2835, true);
+  dv.setInt32(42, 2835, true);
+  dv.setUint32(46, 256, true);
+  for (let i = 0; i < 256; i++){
+    const o = 54 + i * 4;
+    bytes[o]     = pal[i*3+2];        // B
+    bytes[o + 1] = pal[i*3+1];        // G
+    bytes[o + 2] = pal[i*3];          // R
+    bytes[o + 3] = 0;
+  }
+  for (let row = 0; row < H; row++){
+    const dst = off + (H - 1 - row) * stride;
+    bytes.set(idx.subarray(row * W, row * W + W), dst);
+  }
+  return buf;
+}
+/* ============================ /CORE ============================ */
+
+/* ============================ UI ============================ */
+const $ = id => document.getElementById(id);
+let state = null;   // { idx,W,H,pal,ncol,rep,name }
+let result = null;  // { out,W,H,smoothed }
+
+function fmt(n){ return n.toLocaleString("en-US"); }
+
+$("drop").addEventListener("click", () => $("file").click());
+$("drop").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") $("file").click(); });
+["dragover","dragenter"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.add("hover"); }));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.remove("hover"); }));
+$("drop").addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+$("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) loadFile(f); });
+
+function loadFile(f){
+  $("loaderr").classList.add("hidden");
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const { idx, W, H, pal } = parseBMP(rd.result);
+      const ncol = countColours(idx);
+      const rep = analyze(idx, W, H);
+      state = { idx, W, H, pal, ncol, rep, name: f.name };
+      result = null;
+      renderReport();
+      $("analysisCard").classList.remove("hidden");
+      $("resizeCard").classList.remove("hidden");
+      $("resultCard").classList.add("hidden");
+      $("tw").value = W; $("th").value = H;
+      $("status").textContent = "";
+    } catch (err){
+      $("loaderr").textContent = err.message;
+      $("loaderr").classList.remove("hidden");
+      $("analysisCard").classList.add("hidden");
+      $("resizeCard").classList.add("hidden");
+      $("resultCard").classList.add("hidden");
+    }
+  };
+  rd.readAsArrayBuffer(f);
+}
+
+function sparkHTML(axis, kmax){
+  let bars = "";
+  let max = 0;
+  for (let k = 1; k <= kmax; k++) max = Math.max(max, axis.curve[k]);
+  for (let k = 1; k <= kmax; k++){
+    const h = Math.max(2, Math.round(axis.curve[k] / (max || 1) * 34));
+    const on = (k % axis.repeat === 0) ? " class=\"on\"" : "";
+    bars += "<i" + on + " style=\"height:" + h + "px\" title=\"lag " + k + ": " + axis.curve[k].toFixed(3) + "\"></i>";
+  }
+  return "<div class=\"spark\">" + bars + "</div><div class=\"sparklab\">self-match at lags 1–" + kmax + " (blue = repeat multiples)</div>";
+}
+
+function renderReport(){
+  const s = state, r = s.rep;
+  const rows = [
+    ["Size", fmt(s.W) + " × " + fmt(s.H) + " px"],
+    ["Palette colours", s.ncol + (s.ncol > 16 ? "  <em style='color:var(--alarm)'>&gt;16 — check quantization</em>" : "")],
+    ["Repeat (Px × Py)", "<em>" + r.Px + " × " + r.Py + " px</em> &nbsp;(parity " + r.ax.parity + "/" + r.ay.parity + ")"],
+    ["Repeat strength", "H " + r.ax.strength.toFixed(3) + " &nbsp; V " + r.ay.strength.toFixed(3)],
+    ["Confidence", "H " + r.ax.confidence.toFixed(2) + " &nbsp; V " + r.ay.confidence.toFixed(2)],
+    ["Whole repeats", r.blocksX + " cols × " + r.blocksY + " rows"],
+    ["Edge remainder", r.tailX + " px (W), " + r.tailY + " px (H) — carried verbatim as selvage"],
+    ["Warp curve", sparkHTML(r.ax, 16)],
+    ["Weft curve", sparkHTML(r.ay, 16)]
+  ];
+  $("report").innerHTML = rows.map(([k, v]) =>
+    "<div><div class=\"k\">" + k + "</div><div class=\"v\">" + v + "</div></div>").join("");
+  const lo = Math.min(r.ax.confidence, r.ay.confidence);
+  if (lo < 0.4){
+    $("lowconf").innerHTML = "<b>Low confidence:</b> weak or absent repeat. This may be a melange/preview image " +
+      "rather than a technical point-paper. Verify the repeat against your loom spec before trusting the resize.";
+    $("lowconf").classList.remove("hidden");
+  } else {
+    $("lowconf").classList.add("hidden");
+  }
+}
+
+$("go").addEventListener("click", () => {
+  if (!state) return;
+  const tw = parseInt($("tw").value, 10), th = parseInt($("th").value, 10);
+  if (!(tw > 0) || !(th > 0)){ $("status").textContent = "Enter a positive width and height."; return; }
+  if (tw * th > 64e6){ $("status").textContent = "Target too large (max ~64 MP)."; return; }
+  $("go").disabled = true;
+  $("status").textContent = "Resampling" + ($("smooth").checked ? " + smoothing…" : "…");
+  setTimeout(() => {
+    try {
+      const { idx, W, H, pal, rep } = state;
+      let out = phaseLockedResize(idx, W, H, tw, th, rep.Px, rep.Py);
+      const smoothed = $("smooth").checked;
+      if (smoothed) out = smoothBoundaries(out, tw, th, pal);
+      result = { out, W: tw, H: th, smoothed };
+      renderResult();
+    } catch (err){
+      $("status").textContent = "Error: " + err.message;
+    } finally {
+      $("go").disabled = false;
+    }
+  }, 30);
+});
+
+function drawIndexed(cv, idx, W, H, pal){
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  const im = ctx.createImageData(W, H);
+  const d = im.data;
+  for (let i = 0; i < W * H; i++){
+    const p = idx[i] * 3, o = i * 4;
+    d[o] = pal[p]; d[o+1] = pal[p+1]; d[o+2] = pal[p+2]; d[o+3] = 255;
+  }
+  ctx.putImageData(im, 0, 0);
+}
+
+function gridCSS(el, Px, Py, W, H){
+  el.style.backgroundImage =
+    "linear-gradient(rgba(44,75,201,.55) 1px, transparent 1px)," +
+    "linear-gradient(90deg, rgba(44,75,201,.55) 1px, transparent 1px)";
+  el.style.backgroundSize = "calc(100% * " + Px + " / " + W + ") calc(100% * " + Py + " / " + H + ")";
+}
+
+function renderResult(){
+  const s = state, r = result, rep = s.rep;
+  const hIn = verifyRepeat(s.idx, s.W, s.H, rep.Px, 1), hOut = verifyRepeat(r.out, r.W, r.H, rep.Px, 1);
+  const vIn = verifyRepeat(s.idx, s.W, s.H, rep.Py, 0), vOut = verifyRepeat(r.out, r.W, r.H, rep.Py, 0);
+  const colsIn = s.ncol, colsOut = countColours(r.out);
+  const okH = hOut >= hIn - 0.02, okV = vOut >= vIn - 0.02;
+  const arrow = (a, b, ok) => a.toFixed(3) + " → <span class=\"" + (ok ? "ok" : "bad") + "\">" + b.toFixed(3) + "</span>";
+  const cells = [
+    ["Requested", fmt(parseInt($("tw").value,10)) + " × " + fmt(parseInt($("th").value,10)) + " px"],
+    ["Produced", "<em style='font-style:normal;color:var(--warp);font-weight:600'>" + fmt(r.W) + " × " + fmt(r.H) + " px</em>"],
+    ["Colours", colsIn + " → " + colsOut],
+    ["Weave check H (lag " + rep.Px + ")", arrow(hIn, hOut, okH)],
+    ["Weave check V (lag " + rep.Py + ")", arrow(vIn, vOut, okV)]
+  ];
+  $("checks").innerHTML = cells.map(([k, v]) =>
+    "<div><div class=\"k\" style=\"color:var(--ink-soft);font-size:11px;letter-spacing:.08em;text-transform:uppercase\">" + k +
+    "</div><div style=\"margin-top:2px\">" + v + "</div></div>").join("");
+  drawIndexed($("srccv"), s.idx, s.W, s.H, s.pal);
+  drawIndexed($("outcv"), r.out, r.W, r.H, s.pal);
+  $("srcdim").textContent = s.W + "×" + s.H;
+  $("outdim").textContent = r.W + "×" + r.H;
+  gridCSS($("srcgrid"), rep.Px, rep.Py, s.W, s.H);
+  gridCSS($("outgrid"), rep.Px, rep.Py, r.W, r.H);
+  $("resultCard").classList.remove("hidden");
+  $("status").textContent = r.smoothed
+    ? "Done. Note: smoothing edited boundary pixels — verify weavability before loom use."
+    : "Done.";
+  $("resultCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+$("showgrid").addEventListener("change", e => {
+  $("srcframe").classList.toggle("showgrid", e.target.checked);
+  $("outframe").classList.toggle("showgrid", e.target.checked);
+});
+
+$("dl").addEventListener("click", () => {
+  if (!result || !state) return;
+  const buf = writeBMP(result.out, result.W, result.H, state.pal);
+  const blob = new Blob([buf], { type: "image/bmp" });
+  const a = document.createElement("a");
+  const base = state.name.replace(/\.[^.]+$/, "");
+  a.href = URL.createObjectURL(blob);
+  a.download = base + "_" + result.W + "x" + result.H + ".bmp";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+</script>
+</body>
+</html>
