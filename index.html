@@ -12,154 +12,80 @@
     </style>
 </head>
 <body class="bg-white text-gray-900 font-sans leading-relaxed">
-    <div class="max-w-3xl mx-auto px-6 py-8">
-        
-        <!-- Profile Section -->
+    <main class="max-w-3xl mx-auto px-6 py-8">
         <div class="flex items-start mb-8">
             <img src="yash.jpeg" alt="Yash Jain" class="w-24 h-24 rounded-full mr-6 object-cover">
             <div>
-                <h2 class="text-3xl font-semibold mb-2">Hi, I'm Yash!</h2>
+                <h1 class="text-3xl font-semibold mb-2">Hi, I’m Yash Jain</h1>
                 <p class="text-gray-700">
-                    I've been building <a href="#projects" class="text-blue-600 underline cursor-pointer">things</a> for about 8 years now.
+                    I work on video generation models at Cantina Labs. I was one of the first hires in the Singapore office.
                 </p>
-
             </div>
         </div>
 
-        <!-- Background Info -->
-        <div class="mb-8 space-y-4">
-            <!-- <div class="border-l-4 border-gray-300 pl-4 my-6">
-                <p class="text-gray-700">
-                    Most of my projects focus on practical AI applications and full-stack development, 
-                    from enterprise platforms to consumer products.
-                </p>
-            </div> -->
-            
-            <p class="text-gray-700">
-                I grew up in Rajasthan and <a href="https://dpsrkp.net/" class="text-blue-600 underline" target="_blank">New Delhi</a> and moved to Singapore to study Computer Science and Business Student at <a href="https://www.ntu.edu.sg/" class="text-blue-600 underline" target="_blank">NTU</a>. I have previously worked at <a href="https://www.mastercard.com/us/en/innovation/explore-with-us/research-development.html" class="text-blue-600 underline" target="_blank">MasterCard R&D</a>, <a href="https://www.mmlab-ntu.com/" class="text-blue-600 underline" target="_blank">MMLab</a> (S-Lab, NTU), <a href="https://seatrium.com/" class="text-blue-600 underline" target="_blank">Seatrium</a> and <a href="https://www.tuvsud.com/" class="text-blue-600 underline" target="_blank">TUV SUD</a>
-            </p>
-            <p class="text-gray-700">
-                I'm currently working on <a href="https://jitui.ai" class="text-blue-600 underline" target="_blank">JIT UI</a> - Unified Interface for Humans and Agents.
-            </p>
-            
-            <p class="text-gray-700">
-                Since my freshman year I have been building and shipping projects. and NTU has been very generous to fund my curiosity with over <a href="https://www.ntuitive.sg/" class="text-blue-600 underline" target="_blank">$36,000</a> in grants
-            </p>
-        </div>
+        <p class="text-gray-700 mb-8">
+            I grew up in Rajasthan and New Delhi and moved to Singapore to study computer science and business at NTU.
+            Before Cantina, I worked on AI research at <a href="https://www.mmlab-ntu.com/" class="text-blue-600 underline">MMLab</a>
+            under <a href="https://liuziwei7.github.io/" class="text-blue-600 underline">Prof. Ziwei Liu</a> and at Mastercard R&amp;D.
+        </p>
 
-        <!-- Banner Image -->
-        <div class="mb-2 flex justify-center">
+        <div class="mb-8 flex justify-center">
             <img src="banner.png" alt="Singapore cityscape" class="max-w-full h-auto">
         </div>
 
-        <!-- Interests -->
-        <p class="text-gray-700 mb-8">
-            I enjoy walking through the cityscape at Raffles Place, night outs with friends, and thinking I make good <a href="https://www.youtube.com/@YashChopra14" class="text-blue-600 underline" target="_blank">YouTube</a> videos
-        </p>
+        <section class="mb-8">
+            <h2 class="text-gray-800 mb-4">Research and open source</h2>
+            <ul class="space-y-2 ml-6 list-disc list-inside text-gray-700">
+                <li>
+                    <strong>Multi-Object Human–Object Interaction</strong> — research on generating human motion that coordinates with multiple objects, with an accompanying dataset.
+                    <a href="https://huggingface.co/datasets/YashJain/Multi-Object-HOI" class="text-blue-600 underline">Dataset</a>
+                </li>
+                <li>
+                    <strong>SOPPU</strong> — compressing and serving personalized LoRA adapters. The paper was accepted at DAI 2024.
+                    <a href="https://github.com/YashJain14/SOPPU" class="text-blue-600 underline">GitHub</a>
+                </li>
+                <li>
+                    <strong>UI Elements Detection Dataset</strong> — a dataset for detecting interface elements on screen.
+                    <a href="https://huggingface.co/datasets/YashJain/UI-Elements-Detection-Dataset" class="text-blue-600 underline">Hugging Face</a>
+                </li>
+                <li>
+                    <strong>Evals for Visual Generation</strong> — a collection of methods for evaluating visual generation models.
+                    <a href="https://github.com/ziqihuangg/Awesome-Evaluation-of-Visual-Generation" class="text-blue-600 underline">GitHub</a>
+                </li>
+            </ul>
+        </section>
 
+        <section id="projects" class="mb-12">
+            <h2 class="text-gray-800 mb-4">Projects</h2>
+            <ul class="space-y-2 ml-6 list-disc list-inside text-gray-700">
+                <li><strong>Code-Colony</strong> — a strategy game interface for Claude Code and Codex.</li>
+                <li>
+                    <strong>JIT UI</strong> — interfaces generated on demand for people and AI agents.
+                    <a href="https://jitui.ai" class="text-blue-600 underline">JIT UI</a>
+                </li>
+                <li>
+                    <strong>AgentMaps</strong> — pre-mapped website actions for browser agents.
+                    <a href="https://agentmaps.dev" class="text-blue-600 underline">AgentMaps</a>
+                </li>
+                <li>
+                    <strong>Weaver AI</strong> — generative AI for fashion and textiles, backed by NTUitive.
+                    <a href="https://weaverai.in/" class="text-blue-600 underline">Weaver AI</a>
+                </li>
+                <li>
+                    <strong>RizzedIn</strong> — a dating app that matched people using LinkedIn profiles, featured in CNBC and Business Insider.
+                    <a href="https://www.cnbc.com/2025/10/23/inside-a-24-hour-vibe-coding-hackathonhere-are-my-biggest-takeaways.html" class="text-blue-600 underline">CNBC</a> ·
+                    <a href="https://www.businessinsider.com/inside-24-hour-cursor-vibe-coding-hackathon-singapore-ai-tech-2025-10" class="text-blue-600 underline">Business Insider</a>
+                </li>
+                <li><strong>KamaGPT</strong> — reached 22,000 users and 88,000 visits in one week.</li>
+                <li><strong>StoryLine AI</strong> — turns scripts into videos with consistent narration.</li>
+            </ul>
+        </section>
 
-<!-- Projects Section -->
-<div id="projects">
-    <!-- <p class="text-gray-700 mb-2 font-medium">Here are some of the projects I've worked on</p> -->
-    
-    <!-- What I'm Working On -->
-    <p class="text-gray-800 mb-4">What I'm working on:</p>
-    <ul class="space-y-2 mb-8 ml-6 list-disc list-inside">
-        <li class="text-gray-700">
-            <a href="https://agentmaps.dev" class="text-blue-600 underline" target="_blank">AgentMaps</a> - 
-            Google Maps for AI agents for deterministic navigation
-        </li>
-        <li class="text-gray-700">
-            <a href="https://jitui.ai" class="text-blue-600 underline" target="_blank">JIT UI</a> - 
-            Unified Interface for humans and agents
-        </li>
-
-        <li class="text-gray-700">
-            <a href="https://weaverai.in/" class="text-blue-600 underline" target="_blank">Weaver AI</a> - 
-            AI design layer for the physical world (Backed by <a href="https://www.ntuitive.sg/" class="text-blue-600 underline" target="_blank">NTUitive</a>)
-        </li>
-        <li class="text-gray-700">
-            <a href="https://www.youtube.com/YashChopra1411" class="text-blue-600 underline" target="_blank">YouTube Channel</a> - 
-            (700k+ views) Tech, vlogs, and higher education in Singapore
-        </li>
-    </ul>
-
-    <!-- Open Source Contributions -->
-    <p class="text-gray-800 mb-4">Open Source:</p>
-    <ul class="space-y-2 mb-8 ml-6 list-disc list-inside">
-        <li class="text-gray-700">
-            [20k+ Downloads] <a href="https://huggingface.co/datasets/YashJain/UI-Elements-Detection-Dataset" class="text-blue-600 underline" target="_blank">UI-Elements-Detection-Dataset</a> - 
-            UI Element Detection for VLMs
-        </li>
-        <li class="text-gray-700">
-            [20k+ Downloads] <a href="https://huggingface.co/datasets/YashJain/Multi-Object-HOI" class="text-blue-600 underline" target="_blank">Multi-Object HOI</a> - 
-            Multi Object Human Object Interaction Dataset
-        </li>
-        <li class="text-gray-700">
-            [400+ Stars] <a href="https://github.com/ziqihuangg/Awesome-Evaluation-of-Visual-Generation" class="text-blue-600 underline" target="_blank">Evals for Visual Generation</a> - 
-            Methods for evaluating visual generation
-        </li>
-    </ul>
-
-    <!-- Previous Works -->
-    <p class="text-gray-800 mb-4">Previous works:</p>
-    <ul class="space-y-2 mb-12 ml-6 list-disc list-inside">
-                <li class="text-gray-700">
-            <a href="https://github.com/YashJain14/" class="text-blue-600 underline" target="_blank">Multi-object HOI</a> - 
-            Physics-Based Humanoid-Object Interaction generation model (supervised by <a href="https://liuziwei7.github.io/" class="text-blue-600 underline" target="_blank">Prof. Ziwei Liu</a>)
-        </li>
-        <li class="text-gray-700">
-    <a href="https://rizzedin.com" class="text-blue-600 underline" target="_blank">RizzedIn</a> - 
-    LinkedIn x Hinge + AI Clones. Featured in <a href="https://www.cnbc.com/2025/10/23/inside-a-24-hour-vibe-coding-hackathonhere-are-my-biggest-takeaways.html" class="text-blue-600 underline" target="_blank">CNBC</a> and <a href="https://www.businessinsider.com/inside-24-hour-cursor-vibe-coding-hackathon-singapore-ai-tech-2025-10#some-teams-including-rizzed-in-ai-demoed-their-projects-on-stage-13" class="text-blue-600 underline" target="_blank">Business Insider</a>
-</li>
-        <li class="text-gray-700">
-            <a href="https://prediction-markets-bt.vercel.app/" class="text-blue-600 underline" target="_blank">Prediction Markets</a> - 
-            Create, trade, and resolve markets on blockchain with ETH and USDC
-        </li>
-        <li class="text-gray-700">
-            <a href="https://github.com/YashJain14/SOPPU" class="text-blue-600 underline" target="_blank">SOPPU</a> - 
-            Scalable One PEFT per User (Paper accepted to <a href="http://www.adai.ai/dai/2024/index.html" class="text-blue-600 underline" target="_blank">DAI 2024</a> Conference)
-        </li>
-                <li class="text-gray-700">
-            <a href="https://github.com/YashJain14/Knit_Dependency_Injection_visualiser" class="text-blue-600 underline" target="_blank">Knit-Viz</a> - 
-            Dependency injection analyzer for TikTok's Knit with CLI, web, and IntelliJ tools
-        </li>
-        <li class="text-gray-700">
-            <a href="https://github.com/YashJain14/Gemma_TSA" class="text-blue-600 underline" target="_blank">Sliced Gemma</a> - 
-            TSA with Sliced Transformers for Domain Adaptation on Small Datasets
-        </li>
-        <li class="text-gray-700">
-            <a href="https://github.com/YashJain14/" class="text-blue-600 underline" target="_blank">BaseGraph</a> - 
-            Abstract Syntax Trees, Unit testing and DeepWiki
-        </li>
-        <li class="text-gray-700">
-            <a href="https://github.com/YashJain14/OpenContext" class="text-blue-600 underline" target="_blank">OpenContext</a> - 
-            Deep research to searches web and local files to generate reports
-        </li>
-
-
-
-
-        <li class="text-gray-700">
-            <a href="https://kamagpt.vercel.app" class="text-blue-600 underline" target="_blank">KamaGPT</a> - 
-            IYKYK (22k users, 88k visits in a week) (Backed by NTU)
-        </li>
-        <li class="text-gray-700">
-            <a href="https://www.storylineai.in/" class="text-blue-600 underline" target="_blank">StoryLine AI</a> - 
-            Audio consistent video generation (Backed by NTU)
-        </li>
-    </ul>
-</div>
-
-        <!-- Social Links -->
-        <p class="text-gray-700 mb-4">Socials:</p>
         <ul class="flex space-x-4 ml-6">
-            <li><a href="https://x.com/yashchopra1411" class="text-blue-600 underline">Twitter</a></li>
+            <li><a href="https://github.com/YashJain14" class="text-blue-600 underline">GitHub</a></li>
             <li><a href="https://www.linkedin.com/in/yashchopra1411/" class="text-blue-600 underline">LinkedIn</a></li>
-            <li><a href="https://github.com/yashjain14" class="text-blue-600 underline">GitHub</a></li>
+            <li><a href="https://www.youtube.com/@YashChopra14" class="text-blue-600 underline">YouTube</a></li>
         </ul>
-
-        <!-- <p class="text-gray-700 mt-8">Website inspo: https://josephsemrai.com</p> -->
-    </div>
+    </main>
 </body>
 </html>
